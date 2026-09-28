@@ -1,0 +1,41 @@
+name: tecnologia-ecosystem
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: tecnologia_db
+      MYSQL_USER: tecnologia
+      MYSQL_PASSWORD: ${TECNOLOGIA_DB_PASSWORD:?Configura TECNOLOGIA_DB_PASSWORD en .env}
+      MYSQL_ROOT_PASSWORD: ${TECNOLOGIA_ROOT_PASSWORD:?Configura TECNOLOGIA_ROOT_PASSWORD en .env}
+    ports: ["127.0.0.1:3310:3306"]
+    volumes:
+      - tecnologia-data:/var/lib/mysql
+      - ./database/001_tecnologia.sql:/docker-entrypoint-initdb.d/001_tecnologia.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+  tecnologia:
+    build:
+      context: .
+      dockerfile: services/tecnologia/Tecnologia.API/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__TecnologiaDB: Server=db;Port=3306;Database=tecnologia_db;User=tecnologia;Password=${TECNOLOGIA_DB_PASSWORD};
+    ports: ["127.0.0.1:5105:8080"]
+    depends_on:
+      db:
+        condition: service_healthy
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/TecnologiaGateway/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ReverseProxy__Clusters__tecnologia__Destinations__local__Address: http://tecnologia:8080
+    ports: ["127.0.0.1:5100:8080"]
+    depends_on: [tecnologia]
+volumes:
+  tecnologia-data:
+

@@ -1,0 +1,10 @@
+import { createApp } from 'vue'
+import { createPinia } from 'pinia'
+import PrimeVue from 'primevue/config'
+import ToastService from 'primevue/toastservice'
+import App from './App.vue'
+import router from './router'
+import { primevueConfig } from './plugins/primevue'
+import 'primeicons/primeicons.css'
+import './assets/main.css'
+createApp(App).use(createPinia()).use(router).use(PrimeVue,primevueConfig).use(ToastService).mount('#app')

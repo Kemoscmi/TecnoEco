@@ -1,0 +1,37 @@
+{
+  "name": "tecnologia-ecosystem",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fullcalendar/core": "6.1.21",
+    "@fullcalendar/daygrid": "6.1.21",
+    "@fullcalendar/interaction": "6.1.21",
+    "@fullcalendar/list": "6.1.21",
+    "@fullcalendar/timegrid": "6.1.21",
+    "@fullcalendar/vue3": "6.1.21",
+    "@primevue/themes": "^4.2.5",
+    "axios": "^1.7.7",
+    "chart.js": "^4.5.1",
+    "jsbarcode": "^3.12.3",
+    "pinia": "^2.2.6",
+    "primeicons": "^7.0.0",
+    "primevue": "^4.2.5",
+    "qrcode": "^1.5.4",
+    "vue": "^3.5.13",
+    "vue-router": "^4.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/qrcode": "^1.5.5",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "~5.6.3",
+    "vite": "^6.0.3",
+    "vue-tsc": "^2.1.10"
+  }
+}
