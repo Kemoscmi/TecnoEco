@@ -5,4 +5,4 @@ async function request<T>(path:string,method='GET',body?:unknown):Promise<T>{
  if(!res.ok){const error=await res.json().catch(()=>null);throw new Error(error?.detail||'No se pudo completar la operación. Revisa la API local.')}
  return await res.json() as T
 }
-export const api={load:()=>request<Snapshot>(''),create:(data:TicketInput)=>request<Snapshot>('/tickets','POST',data),changeStatus:(id:string,status:Status)=>request<Snapshot>('/tickets/'+id+'/status','PATCH',{status}),addActivity:(data:ActivityInput)=>request<Snapshot>('/activities','POST',data)}
+export const api={load:()=>request<Snapshot>(''),create:(data:TicketInput)=>request<Snapshot>('/tickets','POST',data),changeStatus:(id:string,status:Status)=>request<Snapshot>('/tickets/'+id+'/status','PATCH',{estado:status}),addActivity:(data:ActivityInput)=>request<Snapshot>('/activities','POST',data)}
