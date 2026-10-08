@@ -7,7 +7,7 @@ Implementación de [#2](https://github.com/Kemoscmi/TecnoEco/issues/2), dentro d
 `Ticket` representa una solicitud dirigida a Tecnología; no es un Bug. Conserva `Id`, `Title`, `Description` y `CreatedAt` (UTC), evitando una traducción general del código existente.
 
 - `SolicitanteId`: obligatorio, identificador opaco de texto de hasta 160 caracteres. Identifica a quien crea y necesita la atención. No hay `CreadoPorId` ni captura en nombre de terceros.
-- `ResponsableId`: identificador opaco de texto de hasta 160 caracteres, opcional; ausencia representada mediante `null`.
+- `ResponsableId`: identificador opaco de texto de hasta 160 caracteres, opcional; ausencia representada mediante `null`. Todo Ticket nuevo se crea con este valor en `null`; REQ-005 definirá la asignación posterior.
 - `Colaboradores`: relación independiente `TicketColaborador`, con clave compuesta `(TicketId, ColaboradorId)`. Permite cero o varios colaboradores y evita duplicados por Ticket. No se agregan operaciones ni interfaz de gestión de colaboradores.
 - `Categoria`: texto de hasta 40 caracteres. Catálogo inicial: Problema, Consulta, Solicitud de ayuda, Sugerencia / mejora. Las constantes describen el catálogo actual y pueden evolucionar; no hay ENUM SQL ni taxonomía inmutable.
 - `Estado`: texto de hasta 40 caracteres, inicialmente Recibida. El vocabulario contiene únicamente Recibida, En proceso, Necesitamos información, Resuelta y Rechazada. REQ-004 definirá las transiciones.

@@ -1,6 +1,6 @@
 using Tecnologia.Domain;
 namespace Tecnologia.Application;
-public record TicketInput(string Title,string Description,string Categoria,string SolicitanteId,string? ResponsableId = null);
+public record TicketInput(string Title,string Description,string Categoria,string SolicitanteId);
 public record ActivityInput(string? TicketId,string Text,string Visibility);
 public record StatusInput(string Estado);
 public record Snapshot(List<Ticket> Tickets,List<Activity> Activities);
@@ -11,7 +11,7 @@ public class TechnologyService(ITechnologyRepository repo) {
  static string Choice(string? value,params string[] allowed){if(value is null||!allowed.Contains(value))throw new ArgumentException("Opción no válida.");return value;}
  public async Task<Snapshot> Load(CancellationToken ct)=>new(await repo.Tickets(ct),await repo.Activities(ct));
  public async Task<Snapshot> Create(TicketInput input,CancellationToken ct){
-  var ticket=new Ticket {Title=Text(input.Title,140),Description=Text(input.Description,10000),Categoria=Choice(input.Categoria,CategoriasTicket.Iniciales.ToArray()),SolicitanteId=Identity(input.SolicitanteId),ResponsableId=input.ResponsableId is null ? null : Identity(input.ResponsableId)};
+  var ticket=new Ticket {Title=Text(input.Title,140),Description=Text(input.Description,10000),Categoria=Choice(input.Categoria,CategoriasTicket.Iniciales.ToArray()),SolicitanteId=Identity(input.SolicitanteId),ResponsableId=null};
   repo.Add(ticket);repo.Add(new Activity{TicketId=ticket.Id,Text="Ticket creado. Pendiente de revisión."});await repo.Save(ct);return await Load(ct);
  }
  // Adaptación del prototipo; no define ni valida transiciones de REQ-004.
