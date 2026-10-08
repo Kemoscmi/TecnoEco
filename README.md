@@ -13,7 +13,7 @@ npm.cmd run dev
 
 Abrir http://localhost:5190. No requiere los servicios del proyecto original. Por defecto usa datos de ejemplo guardados en localStorage de este navegador y este origen; no se comparten entre equipos. Las respuestas clasificadas como públicas no se envían a nadie.
 
-Incluye creación de tickets internos o de clientes, bugs, soporte, historias de usuario, tareas técnicas, filtros, tablero, cambios de estado, responsable, solicitante, notas y bitácora general. La bitácora registra automáticamente creación y cambios de estado. En QA es una etapa del tablero, todavía no un módulo de pruebas.
+El prototipo permite crear Tickets, consultar filtros y tablero, cambiar estados y registrar actividades. REQ-001 adapta esos consumidores al [modelo base de Solicitudes](docs/02-domains/REQ-001-modelo-base-solicitudes.md): categorías de solicitudes, cinco estados, IDs de solicitante/responsable y colaboradores. No hay prioridades; un Ticket no es un Bug. Las actividades existentes no constituyen la auditoría definitiva y las pantallas no implementan los requerimientos posteriores.
 
 ## Arquitectura
 
@@ -33,6 +33,8 @@ Copiar frontends/ecosystem/.env.example a .env.local en esa carpeta, cambiar VIT
 Puertos exclusivos de este proyecto: frontend 5190, gateway 5100, API 5105, MySQL 3310. Volumen y red de Docker independientes. No se copiaron credenciales, datos, historial Git ni despliegues del sistema original.
 
 Para ejecutar .NET sin Docker: crear la base con database/001_tecnologia.sql, configurar ConnectionStrings__TecnologiaDB en el entorno, ejecutar dotnet run --project services/tecnologia/Tecnologia.API y, en otra terminal, dotnet run --project gateway/TecnologiaGateway.
+
+REQ-001 cambia el esquema: el SQL inicializa una base vacía y no convierte tablas del prototipo anterior. Si ya existe una base, respaldarla y reinicializarla explícitamente antes de usar esta versión; véanse las [indicaciones del esquema](docs/02-domains/REQ-001-modelo-base-solicitudes.md#esquema-sql). No hay migración automática ni EF Code First.
 
 ## Verificación
 
