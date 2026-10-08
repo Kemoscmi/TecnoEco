@@ -4,7 +4,7 @@ Documenta únicamente conceptos que podemos describir actualmente. Las descripci
 
 | Concepto | Descripción actual | Aspectos pendientes |
 | --- | --- | --- |
-| Solicitud/Ticket | Necesidad dirigida a Tecnología. `Ticket` es el nombre técnico de la entidad; no es un Bug. | [REQ-001](../02-domains/REQ-001-modelo-base-solicitudes.md) define el modelo base, categorías iniciales y vocabulario de estados; las transiciones corresponden a REQ-004. |
+| Solicitud/Ticket | Necesidad dirigida a Tecnología. `Ticket` es el nombre técnico de la entidad; no es un Bug. | [REQ-001](../02-domains/REQ-001-modelo-base-solicitudes.md) define el modelo base y las categorías; [REQ-004](../02-domains/REQ-004-estados-solicitudes.md) define los estados y cambios explícitos iniciales. |
 | Solicitante | Persona que plantea una solicitud. | Pendiente de definición: identidad y relación con usuarios/clientes. |
 | Cliente | Quien recibe atención y podría crear y seguir solicitudes mediante el portal previsto. | Pendiente de definición: estructura de empresas/clientes y representación. |
 | Solicitud interna | Necesidad planteada desde el ámbito interno de la organización. | Pendiente de definición: identificación y tratamiento. |

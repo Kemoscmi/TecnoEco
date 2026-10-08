@@ -10,7 +10,7 @@ Implementación de [#2](https://github.com/Kemoscmi/TecnoEco/issues/2), dentro d
 - `ResponsableId`: identificador opaco de texto de hasta 160 caracteres, opcional; ausencia representada mediante `null`. Todo Ticket nuevo se crea con este valor en `null`; REQ-005 definirá la asignación posterior.
 - `Colaboradores`: relación independiente `TicketColaborador`, con clave compuesta `(TicketId, ColaboradorId)`. Permite cero o varios colaboradores y evita duplicados por Ticket. No se agregan operaciones ni interfaz de gestión de colaboradores.
 - `Categoria`: texto de hasta 40 caracteres. Catálogo inicial: Problema, Consulta, Solicitud de ayuda, Sugerencia / mejora. Las constantes describen el catálogo actual y pueden evolucionar; no hay ENUM SQL ni taxonomía inmutable.
-- `Estado`: texto de hasta 40 caracteres, inicialmente Recibida. El vocabulario contiene únicamente Recibida, En proceso, Necesitamos información, Resuelta y Rechazada. REQ-004 definirá las transiciones.
+- `Estado`: texto de hasta 40 caracteres, inicialmente Recibida. El vocabulario contiene únicamente Recibida, En proceso, Necesitamos información, Resuelta y Rechazada. REQ-004 valida los cambios explícitos; no define una matriz restrictiva de transiciones.
 
 Los identificadores externos no se normalizan ni representan nombres de personas. Su collation SQL es `utf8mb4_bin` para distinguir mayúsculas. No se crean tablas de usuarios, claves externas a identidad, perfiles persistidos, autenticación ni permisos. Los perfiles conceptuales continúan siendo Cliente, Soporte y Development; la integración definitiva sigue pendiente.
 
@@ -22,7 +22,7 @@ Se eliminan `Type`, `Origin`, `Priority`, `Requester`, `Assignee` y `Status`. No
 
 Se actualizan los DTO, servicio, repositorio, tipos TypeScript y consumidores existentes para usar el nuevo modelo. Se conservan las rutas de la API; el cuerpo del PATCH `/tickets/{id}/status` ahora contiene `estado`. No se mantienen alias del contrato antiguo.
 
-La creación, modificación libre de estado y actividades preexistentes siguen siendo mecanismos de demostración en Development: no implementan REQ-002, REQ-004, REQ-005 ni REQ-011. Los campos de identidad de la pantalla son IDs de prueba, no una integración de identidad ni autorización para actuar por otra persona. Los controles, conteos y vistas existentes solo se adaptan al vocabulario; no se entregan los requerimientos de dashboard, listado o detalle.
+La creación y actividades preexistentes siguen siendo mecanismos de demostración en Development. REQ-004 incorpora cambios de estado explícitos, pero no autenticación/autorización ni una matriz de transiciones. Los campos de identidad de la pantalla son IDs de prueba, no una integración de identidad ni autorización para actuar por otra persona. Los controles, conteos y vistas existentes solo se adaptan al vocabulario; no se entregan los requerimientos de dashboard, listado o detalle.
 
 El almacenamiento demo usa la nueva clave `tecnologia-ecosystem.demo.req001.v2`; no importa datos incompatibles ni borra la clave anterior. El modo API no importa datos demo.
 
@@ -45,6 +45,6 @@ La suite ejecutable verifica contratos, validación de entradas y metadatos EF. 
 
 ## Pendiente fuera de REQ-001
 
-Integración definitiva de identidad/perfiles; reglas de asignación y colaboradores (REQ-005); ciclo de vida (REQ-004); auditoría completa (REQ-011); funcionalidades visuales, adjuntos, notificaciones y trabajo técnico de los requerimientos posteriores.
+Integración definitiva de identidad/perfiles; reglas de asignación y colaboradores (REQ-005); auditoría completa (REQ-011); validaciones de resolución/rechazo (REQ-012); funcionalidades visuales, adjuntos, notificaciones y trabajo técnico de los requerimientos posteriores.
 
 Este primer PR usa `main` como base porque no existe `develop`. La estrategia de integración debe formalizarse antes de los siguientes requerimientos.
