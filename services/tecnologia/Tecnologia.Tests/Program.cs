@@ -1,5 +1,6 @@
 using Tecnologia.Application;
 using Tecnologia.Domain;
+using System.Text.Json;
 
 var repo = new MemoryRepository();
 var service = new TechnologyService(repo);
@@ -24,15 +25,20 @@ Check(ticket.ResponsableId is null && ticket.Colaboradores.Count == 0, "Responsa
 Check(ticket.CreatedAt.Offset == TimeSpan.Zero && ticket.Id.StartsWith("TEC-"), "Identidad del Ticket y fecha UTC");
 foreach (var categoria in CategoriasTicket.Iniciales)
 {
-    var result = await service.Create(input with { Categoria = categoria, SolicitanteId = "Identity:Aa-01", ResponsableId = "Identity:Bb-02" }, ct);
+    var result = await service.Create(input with { Categoria = categoria, SolicitanteId = "Identity:Aa-01" }, ct);
     var created = result.Tickets.Last();
-    Check(created.Categoria == categoria && created.SolicitanteId == "Identity:Aa-01" && created.ResponsableId == "Identity:Bb-02", "Categoría e identificadores opacos: " + categoria);
+    Check(created.Categoria == categoria && created.SolicitanteId == "Identity:Aa-01" && created.ResponsableId is null, "Categoría e identificadores opacos: " + categoria);
 }
 await Reject<ArgumentException>(() => service.Create(input with { Categoria = "Bug" }, ct), "Ticket no es Bug");
 await Reject<ArgumentException>(() => service.Create(input with { SolicitanteId = " " }, ct), "Solicitante obligatorio");
 await Reject<ArgumentException>(() => service.Create(input with { SolicitanteId = new string('x', 161) }, ct), "Límite de identificador");
-await Reject<ArgumentException>(() => service.Create(input with { ResponsableId = " " }, ct), "Ausencia de responsable se expresa con null");
 await Reject<ArgumentException>(() => service.Create(input with { Description = " " }, ct), "Descripción obligatoria");
+Check(typeof(TicketInput).GetProperty(nameof(Ticket.ResponsableId)) is null, "Contrato de creación no admite responsable");
+var inputApi = JsonSerializer.Deserialize<TicketInput>("""{"title":"Solicitud API","description":"Prueba del contrato","categoria":"Consulta","solicitanteId":"cliente-api","responsableId":"soporte-01"}""", new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+var ticketApi = (await service.Create(inputApi, ct)).Tickets.Last();
+Check(ticketApi.ResponsableId is null, "Cuerpo de creación no asigna responsable");
+ticket.ResponsableId = "soporte-01";
+Check(ticket.ResponsableId == "soporte-01", "Modelo permite asignación posterior");
 Check(EstadosTicket.Todos.SequenceEqual(new[] { "Recibida", "En proceso", "Necesitamos información", "Resuelta", "Rechazada" }), "Únicamente los cinco estados acordados");
 var evento = new EventoTicket(ticket.Id, "actor-01", new DateTimeOffset(2026, 10, 7, 9, 0, 0, TimeSpan.FromHours(-6)), "ejemplo-contrato");
 Check(evento.FechaUtc.Offset == TimeSpan.Zero && evento.FechaUtc.Hour == 15 && evento.ActorId == "actor-01" && evento.TicketId == ticket.Id && evento.TipoEvento == "ejemplo-contrato", "Contrato de evento normaliza UTC sin generar auditoría");
