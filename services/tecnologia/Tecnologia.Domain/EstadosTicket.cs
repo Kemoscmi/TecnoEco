@@ -1,6 +1,7 @@
 namespace Tecnologia.Domain;
 
-// Solo vocabulario; REQ-004 definirá las reglas de transición.
+// REQ-004 define el vocabulario y valida los cambios explícitos.
+// No existe una matriz de transiciones: las reglas adicionales siguen pendientes.
 public static class EstadosTicket
 {
     public const string Recibida = "Recibida";
@@ -10,4 +11,12 @@ public static class EstadosTicket
     public const string Rechazada = "Rechazada";
     public static IReadOnlyList<string> Todos { get; } =
         Array.AsReadOnly(new[] { Recibida, EnProceso, NecesitamosInformacion, Resuelta, Rechazada });
+
+    public static string Validar(string? estado)
+    {
+        if (estado is null || !Todos.Contains(estado))
+            throw new ArgumentException("Estado no válido.");
+
+        return estado;
+    }
 }

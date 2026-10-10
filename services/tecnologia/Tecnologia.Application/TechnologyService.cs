@@ -11,12 +11,12 @@ public class TechnologyService(ITechnologyRepository repo) {
  static string Choice(string? value,params string[] allowed){if(value is null||!allowed.Contains(value))throw new ArgumentException("Opción no válida.");return value;}
  public async Task<Snapshot> Load(CancellationToken ct)=>new(await repo.Tickets(ct),await repo.Activities(ct));
  public async Task<Snapshot> Create(TicketInput input,CancellationToken ct){
-  var ticket=new Ticket {Title=Text(input.Title,140),Description=Text(input.Description,10000),Categoria=Choice(input.Categoria,CategoriasTicket.Iniciales.ToArray()),SolicitanteId=Identity(input.SolicitanteId),ResponsableId=null};
+  var ticket=new Ticket {Title=Text(input.Title,140),Description=Text(input.Description,10000),Categoria=Choice(input.Categoria,CategoriasTicket.Iniciales.ToArray()),SolicitanteId=Identity(input.SolicitanteId),ResponsableId=null,Estado=EstadosTicket.Recibida};
   repo.Add(ticket);repo.Add(new Activity{TicketId=ticket.Id,Text="Ticket creado. Pendiente de revisión."});await repo.Save(ct);return await Load(ct);
  }
- // Adaptación del prototipo; no define ni valida transiciones de REQ-004.
+ // Acción explícita de Tecnología. REQ-004 no define una matriz restrictiva de transiciones.
  public async Task<Snapshot> ChangeStatus(string id,StatusInput input,CancellationToken ct){
-  var status=Choice(input.Estado,EstadosTicket.Todos.ToArray());var ticket=await repo.Find(id,ct)??throw new KeyNotFoundException("Ticket no encontrado.");
+  var status=EstadosTicket.Validar(input.Estado);var ticket=await repo.Find(id,ct)??throw new KeyNotFoundException("Ticket no encontrado.");
   if(ticket.Estado!=status){repo.Add(new Activity{TicketId=id,Text=$"Estado actualizado: {ticket.Estado} → {status}."});ticket.Estado=status;await repo.Save(ct);}return await Load(ct);
  }
  public async Task<Snapshot> AddActivity(ActivityInput input,CancellationToken ct){
