@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed,onMounted,ref } from 'vue'
+import { computed,onMounted,ref,watch } from 'vue'
 import { useRoute,useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
@@ -14,13 +14,22 @@ import { statuses,categorias,type Activity,type Status } from '@/types/tecnologi
 // REQ-005: en demo el actor es un ID fijo. En producción vendrá del perfil autenticado.
 const ACTOR_ID='tecnologia-demo'
 const store=useTecnologiaStore(),route=useRoute(),router=useRouter(),toast=useToast()
-const section=computed(()=>route.params.section),query=ref(''),categoria=ref('Todos'),status=ref('Todos'),generalOpen=ref(false),selectedId=ref<string|null>(null),busy=ref(false)
+const section=computed(()=>route.params.section),query=ref(''),categoria=ref('Todos'),generalOpen=ref(false),selectedId=ref<string|null>(null),busy=ref(false)
+// REQ-006: pre-aplicar filtro de estado o sinAsignar desde query params del dashboard
+const status=ref(typeof route.query.estado==='string'?route.query.estado:'Todos')
+const sinAsignarFiltro=ref(route.query.sinAsignar==='1')
 const selected=computed(()=>store.data.tickets.find(t=>t.id===selectedId.value))
 const detailOpen=computed({get:()=>!!selected.value,set:(v:boolean)=>{if(!v){selectedId.value=null;note.value='';nuevoColaborador.value='';reasignarId.value=''}}})
 const note=ref(''),visibility=ref<Activity['visibility']>('Nota interna'),general=ref('')
 // REQ-005
 const nuevoColaborador=ref(''),reasignarId=ref('')
-const filtered=computed(()=>store.data.tickets.filter(t=>(t.title+' '+t.id+' '+t.solicitanteId).toLocaleLowerCase().includes(query.value.toLocaleLowerCase())&&(categoria.value==='Todos'||t.categoria===categoria.value)&&(status.value==='Todos'||t.estado===status.value)))
+const filtered=computed(()=>store.data.tickets.filter(t=>{
+ if(!(t.title+' '+t.id+' '+t.solicitanteId).toLocaleLowerCase().includes(query.value.toLocaleLowerCase()))return false
+ if(categoria.value!=='Todos'&&t.categoria!==categoria.value)return false
+ if(sinAsignarFiltro.value&&t.responsableId)return false
+ if(!sinAsignarFiltro.value&&status.value!=='Todos'&&t.estado!==status.value)return false
+ return true
+}))
 const stats=computed(()=>[{label:'Tickets abiertos',value:store.data.tickets.filter(t=>t.estado!=='Resuelta'&&t.estado!=='Rechazada').length,icon:'pi-ticket'},{label:'En proceso',value:store.data.tickets.filter(t=>t.estado==='En proceso').length,icon:'pi-code'},{label:'Necesitamos información',value:store.data.tickets.filter(t=>t.estado==='Necesitamos información').length,icon:'pi-check-square'},{label:'Resueltos',value:store.data.tickets.filter(t=>t.estado==='Resuelta').length,icon:'pi-check-circle'}])
 const ticketEvents=computed(()=>store.data.activities.filter(e=>e.ticketId===selectedId.value))
 const severity=(s:string)=>s==='Resuelta'?'success':s==='Necesitamos información'?'secondary':s==='En proceso'?'warn':'info'
@@ -33,6 +42,8 @@ function changeStatus(value:Status){if(selected.value&&value!==selected.value.es
 async function tomarSolicitud(){if(!selected.value)return;await run(()=>store.tomarSolicitud(selected.value!.id,{actorId:ACTOR_ID}))}
 async function reasignar(){if(!reasignarId.value.trim()||!selected.value)return;await run(async()=>{await store.reasignar(selected.value!.id,{actorId:ACTOR_ID,nuevoResponsableId:reasignarId.value.trim()});reasignarId.value=''})}
 async function agregarColaborador(){if(!nuevoColaborador.value.trim()||!selected.value)return;await run(async()=>{await store.agregarColaborador(selected.value!.id,{colaboradorId:nuevoColaborador.value.trim()});nuevoColaborador.value=''})}
+// Actualizar filtros si el query cambia (p.ej. navegando entre cards del dashboard)
+watch(()=>route.query,(q)=>{status.value=typeof q.estado==='string'?q.estado:'Todos';sinAsignarFiltro.value=q.sinAsignar==='1'})
 onMounted(()=>store.load())
 </script>
 <template><div class="page"><div class="page-heading"><div><h1>Tecnología</h1><p>Un espacio para reportar, resolver y dejar constancia.</p></div><Button label="Nueva solicitud" icon="pi pi-plus" :disabled="!store.ready||busy" @click="router.push('/tecnologia/solicitudes/nueva')"/></div>
@@ -40,7 +51,7 @@ onMounted(()=>store.load())
 <div class="stats"><div v-for="stat in stats" :key="stat.label" class="stat"><span>{{stat.label}} <i :class="['pi',stat.icon]"/></span><b>{{stat.value}}</b></div></div>
 <div class="tabs"><RouterLink to="/tecnologia/tickets">Tickets</RouterLink><RouterLink to="/tecnologia/tablero">Tablero de trabajo</RouterLink><RouterLink to="/tecnologia/bitacora">Bitácora general</RouterLink></div>
 <p v-if="store.loading" role="status">Cargando…</p>
-<div v-else-if="section==='tickets'" class="tickets-layout"><section class="panel"><div class="panel-heading"><h2>Bandeja de tickets</h2><small>{{filtered.length}} solicitudes</small></div><div class="filters"><InputText v-model="query" aria-label="Buscar tickets" placeholder="Buscar por título, folio o solicitante"/><Select v-model="categoria" :options="['Todos',...categorias]" aria-label="Categoría"/><Select v-model="status" :options="['Todos',...statuses]" aria-label="Estado"/></div><div class="table-scroll"><table><thead><tr><th>Ticket / solicitud</th><th>Categoría</th><th>Estado</th></tr></thead><tbody><tr v-for="ticket in filtered" :key="ticket.id"><td><button class="ticket-link" @click="selectedId=ticket.id"><small>{{ticket.id.slice(0,14)}} · {{ticket.categoria}}</small><strong>{{ticket.title}}</strong><small>{{ticket.solicitanteId}} · {{ticket.responsableId ?? 'Sin responsable'}}</small></button></td><td><Tag :value="ticket.categoria" severity="secondary"/></td><td><Tag :value="ticket.estado" :severity="severity(ticket.estado)"/></td></tr><tr v-if="!filtered.length"><td colspan="3" class="empty">No hay tickets para mostrar.</td></tr></tbody></table></div></section><aside class="panel activity-panel"><div class="panel-heading"><h2>Actividad reciente</h2><i class="pi pi-history"/></div><div class="timeline"><article v-for="event in store.data.activities.slice(0,5)" :key="event.id"><small>{{event.ticketId?.slice(0,14)||'Actividad general'}}</small><p>{{event.text}}</p><small>{{date(event.createdAt)}} · {{event.visibility}}</small></article><p v-if="!store.data.activities.length">Aún no hay actividades.</p></div></aside></div>
+<div v-else-if="section==='tickets'" class="tickets-layout"><section class="panel"><div class="panel-heading"><div><h2>Bandeja de tickets</h2><small v-if="sinAsignarFiltro" class="filtro-activo"><i class="pi pi-filter-fill"/> Mostrando: Sin asignar · <button class="text-link" @click="sinAsignarFiltro=false;status='Todos'">Limpiar</button></small><small v-else-if="status!=='Todos'" class="filtro-activo"><i class="pi pi-filter-fill"/> Mostrando: {{status}} · <button class="text-link" @click="status='Todos'">Limpiar</button></small><small v-else>{{filtered.length}} solicitudes</small></div></div><div class="filters"><InputText v-model="query" aria-label="Buscar tickets" placeholder="Buscar por título, folio o solicitante"/><Select v-model="categoria" :options="['Todos',...categorias]" aria-label="Categoría"/><Select v-model="status" :options="['Todos',...statuses]" aria-label="Estado" :disabled="sinAsignarFiltro"/></div><div class="table-scroll"><table><thead><tr><th>Ticket / solicitud</th><th>Categoría</th><th>Estado</th></tr></thead><tbody><tr v-for="ticket in filtered" :key="ticket.id"><td><button class="ticket-link" @click="selectedId=ticket.id"><small>{{ticket.id.slice(0,14)}} · {{ticket.categoria}}</small><strong>{{ticket.title}}</strong><small>{{ticket.solicitanteId}} · {{ticket.responsableId ?? 'Sin responsable'}}</small></button></td><td><Tag :value="ticket.categoria" severity="secondary"/></td><td><Tag :value="ticket.estado" :severity="severity(ticket.estado)"/></td></tr><tr v-if="!filtered.length"><td colspan="3" class="empty">No hay tickets para mostrar.</td></tr></tbody></table></div></section><aside class="panel activity-panel"><div class="panel-heading"><h2>Actividad reciente</h2><i class="pi pi-history"/></div><div class="timeline"><article v-for="event in store.data.activities.slice(0,5)" :key="event.id"><small>{{event.ticketId?.slice(0,14)||'Actividad general'}}</small><p>{{event.text}}</p><small>{{date(event.createdAt)}} · {{event.visibility}}</small></article><p v-if="!store.data.activities.length">Aún no hay actividades.</p></div></aside></div>
 <div v-else-if="section==='tablero'" class="board"><section v-for="column in statuses" :key="column" class="board-column"><h2>{{column}} <small>{{store.data.tickets.filter(t=>t.estado===column).length}}</small></h2><button v-for="ticket in store.data.tickets.filter(t=>t.estado===column)" :key="ticket.id" class="board-card" @click="selectedId=ticket.id"><small>{{ticket.categoria}} · {{ticket.id.slice(0,14)}}</small><strong>{{ticket.title}}</strong><p>{{ticket.responsableId ?? 'Sin responsable'}}</p></button><p v-if="!store.data.tickets.some(t=>t.estado===column)" class="empty">Sin tickets</p></section></div>
 <section v-else class="panel"><div class="panel-heading"><div><h2>Bitácora general</h2><small>Avances, cambios de estado y actividades del equipo.</small></div><Button label="Registrar actividad" icon="pi pi-plus" :disabled="!store.ready||busy" @click="generalOpen=true"/></div><div class="timeline"><article v-for="event in store.data.activities" :key="event.id"><button v-if="event.ticketId" class="text-link" @click="selectedId=event.ticketId">{{event.ticketId.slice(0,14)}}</button><b v-else>Actividad general</b><p>{{event.text}}</p><small>{{date(event.createdAt)}} · {{event.visibility}}</small></article><p v-if="!store.data.activities.length" class="empty">Registra la primera actividad del equipo.</p></div></section>
 
