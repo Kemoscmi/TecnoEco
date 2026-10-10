@@ -8,3 +8,7 @@ export interface Ticket extends TicketInput { id:string; responsableId:string|nu
 export interface Activity { id:string; ticketId:string|null; text:string; visibility:'Nota interna'|'Respuesta al solicitante'; createdAt:string }
 export interface Snapshot { tickets:Ticket[]; activities:Activity[] }
 export interface ActivityInput { ticketId:string|null; text:string; visibility:Activity['visibility'] }
+// REQ-005
+export interface TomarSolicitudInput { actorId:string }
+export interface ReasignarInput { actorId:string; nuevoResponsableId:string }
+export interface ColaboradorInput { colaboradorId:string }
