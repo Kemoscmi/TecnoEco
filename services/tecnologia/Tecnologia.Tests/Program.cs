@@ -104,6 +104,51 @@ var req003InfoAct = req003InfoData.Activities.First(a => a.Text == "También fal
 Check(req003InfoAct.Visibility == "Respuesta al solicitante" && req003InfoAct.TicketId == req003Ticket.Id, "REQ-003: información posterior del solicitante llega a Tecnología");
 Console.WriteLine("Todas las comprobaciones REQ-003 correctas.");
 
+// REQ-005 — Asignación, responsables y colaboradores
+var req005Input = new TicketInput("Acceso al servidor de respaldos", "Solicito acceso para revisar los respaldos del último trimestre.", CategoriasTicket.SolicitudDeAyuda, "solicitante-req005");
+var req005Data = await service.Create(req005Input, ct);
+var req005Ticket = req005Data.Tickets.Last();
+// Una solicitud puede iniciar sin responsable
+Check(req005Ticket.ResponsableId is null && req005Ticket.Estado == EstadosTicket.Recibida, "REQ-005: solicitud inicia sin responsable en Recibida");
+// Tomar solicitud: asigna responsable y avanza Recibida → En proceso
+var req005TomadaData = await service.TomarSolicitud(req005Ticket.Id, new TomarSolicitudInput("soporte-01"), ct);
+var req005TomadaTicket = req005TomadaData.Tickets.First(t => t.Id == req005Ticket.Id);
+Check(req005TomadaTicket.ResponsableId == "soporte-01", "REQ-005: Tomar solicitud asigna responsable");
+Check(req005TomadaTicket.Estado == EstadosTicket.EnProceso, "REQ-005: Tomar solicitud cambia Recibida a En proceso");
+var req005TomadaAct = req005TomadaData.Activities.First(a => a.TicketId == req005Ticket.Id && a.Text.Contains("tomó la solicitud"));
+Check(req005TomadaAct is not null, "REQ-005: Tomar solicitud registra la acción en bitácora");
+// Reasignar: cambia responsable, conserva estado, registra actor/anterior/nuevo/momento
+var req005ReasigData = await service.Reasignar(req005Ticket.Id, new ReasignarInput("soporte-02", "desarrollo-01"), ct);
+var req005ReasigTicket = req005ReasigData.Tickets.First(t => t.Id == req005Ticket.Id);
+Check(req005ReasigTicket.ResponsableId == "desarrollo-01", "REQ-005: reasignar actualiza el responsable principal");
+Check(req005ReasigTicket.Estado == EstadosTicket.EnProceso, "REQ-005: reasignar conserva el estado actual");
+var req005ReasigAct = req005ReasigData.Activities.First(a => a.TicketId == req005Ticket.Id && a.Text.Contains("Reasignada"));
+Check(req005ReasigAct.Text.Contains("soporte-02") && req005ReasigAct.Text.Contains("soporte-01") && req005ReasigAct.Text.Contains("desarrollo-01"), "REQ-005: reasignar registra actor, responsable anterior y nuevo");
+// Agregar colaboradores: uno o varios, sin duplicados
+await service.AgregarColaborador(req005Ticket.Id, new ColaboradorInput("dev-colaborador-01"), ct);
+await service.AgregarColaborador(req005Ticket.Id, new ColaboradorInput("dev-colaborador-02"), ct);
+var req005ColabData = await service.Load(ct);
+var req005ColabTicket = req005ColabData.Tickets.First(t => t.Id == req005Ticket.Id);
+Check(req005ColabTicket.Colaboradores.Count == 2, "REQ-005: se pueden agregar varios colaboradores");
+Check(req005ColabTicket.Colaboradores.Any(c => c.ColaboradorId == "dev-colaborador-01") && req005ColabTicket.Colaboradores.Any(c => c.ColaboradorId == "dev-colaborador-02"), "REQ-005: colaboradores registrados correctamente");
+// Un único responsable principal — al tomar/reasignar siempre hay uno
+Check(req005ColabTicket.ResponsableId == "desarrollo-01", "REQ-005: existe un único responsable principal");
+// Rechazar colaborador duplicado
+await Reject<InvalidOperationException>(() => service.AgregarColaborador(req005Ticket.Id, new ColaboradorInput("dev-colaborador-01"), ct), "REQ-005: rechazar colaborador duplicado");
+// Tomar solicitud fuera de Recibida: asigna responsable pero no fuerza transición de estado
+var req005OtroInput = new TicketInput("Segunda solicitud", "Para probar tomar fuera de Recibida.", CategoriasTicket.Consulta, "solicitante-req005b");
+var req005OtroTicket = (await service.Create(req005OtroInput, ct)).Tickets.Last();
+await service.ChangeStatus(req005OtroTicket.Id, new StatusInput(EstadosTicket.EnProceso), ct);
+await service.TomarSolicitud(req005OtroTicket.Id, new TomarSolicitudInput("soporte-03"), ct);
+var req005OtroFinal = (await service.Load(ct)).Tickets.First(t => t.Id == req005OtroTicket.Id);
+Check(req005OtroFinal.ResponsableId == "soporte-03", "REQ-005: Tomar solicitud fuera de Recibida asigna responsable");
+Check(req005OtroFinal.Estado == EstadosTicket.EnProceso, "REQ-005: Tomar fuera de Recibida no cambia el estado actual");
+// Ticket inexistente
+await Reject<KeyNotFoundException>(() => service.TomarSolicitud("no-existe", new TomarSolicitudInput("actor"), ct), "REQ-005: Tomar solicitud rechaza ticket inexistente");
+await Reject<KeyNotFoundException>(() => service.Reasignar("no-existe", new ReasignarInput("actor", "nuevo"), ct), "REQ-005: Reasignar rechaza ticket inexistente");
+await Reject<ArgumentException>(() => service.Reasignar(req005Ticket.Id, new ReasignarInput("actor", " "), ct), "REQ-005: Reasignar rechaza ID de responsable vacío");
+Console.WriteLine("Todas las comprobaciones REQ-005 correctas.");
+
 static void Check(bool condition, string message) { if (!condition) throw new Exception(message); Console.WriteLine("OK: " + message); }
 static async Task Reject<T>(Func<Task<Snapshot>> action, string message) where T : Exception {
     try { await action(); } catch (T) { Console.WriteLine("OK: " + message); return; }

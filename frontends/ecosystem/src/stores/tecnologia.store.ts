@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api,demoMode } from '@/services/tecnologia.api'
-import type { Snapshot,TicketInput,Status,ActivityInput,Activity } from '@/types/tecnologia'
+import type { Snapshot,TicketInput,Status,ActivityInput,Activity,TomarSolicitudInput,ReasignarInput,ColaboradorInput } from '@/types/tecnologia'
 const key='tecnologia-ecosystem.demo.req001.v2'
 function seed():Snapshot {const now=new Date().toISOString();return {tickets:[
 {id:'TEC-DEMO01',title:'Error al guardar una solicitud',description:'Al confirmar la solicitud aparece un error. Revisar el flujo de guardado.',categoria:'Problema',estado:'Recibida',solicitanteId:'demo-cliente-01',responsableId:null,colaboradores:[],createdAt:now},
@@ -16,5 +16,30 @@ export const useTecnologiaStore=defineStore('tecnologia',()=>{
  async function create(input:TicketInput){const id='TEC-'+crypto.randomUUID().replaceAll('-','').toUpperCase();await mutate(d=>{d.tickets.unshift({...input,id,responsableId:null,estado:'Recibida',colaboradores:[],createdAt:new Date().toISOString()});d.activities.unshift(activity({ticketId:id,text:'Ticket creado. Pendiente de revisión.',visibility:'Nota interna'}))},()=>api.create(input))}
  async function changeStatus(id:string,status:Status){await mutate(d=>{const ticket=d.tickets.find(t=>t.id===id);if(!ticket)throw new Error('Ticket no encontrado');const before=ticket.estado;if(before===status)return;ticket.estado=status;d.activities.unshift(activity({ticketId:id,text:'Estado actualizado: '+before+' → '+status,visibility:'Nota interna'}))},()=>api.changeStatus(id,status))}
  async function addActivity(input:ActivityInput){await mutate(d=>d.activities.unshift(activity(input)),()=>api.addActivity(input))}
- return {data,loading,ready,error,load,create,changeStatus,addActivity}
+ // REQ-005
+ async function tomarSolicitud(id:string,input:TomarSolicitudInput){
+  await mutate(d=>{
+   const t=d.tickets.find(t=>t.id===id);if(!t)throw new Error('Ticket no encontrado');
+   t.responsableId=input.actorId;
+   if(t.estado==='Recibida'){t.estado='En proceso';d.activities.unshift(activity({ticketId:id,text:`${input.actorId} tomó la solicitud. Estado: Recibida → En proceso.`,visibility:'Nota interna'}));}
+   else{d.activities.unshift(activity({ticketId:id,text:`${input.actorId} tomó la solicitud.`,visibility:'Nota interna'}));}
+  },()=>api.tomarSolicitud(id,input))
+ }
+ async function reasignar(id:string,input:ReasignarInput){
+  await mutate(d=>{
+   const t=d.tickets.find(t=>t.id===id);if(!t)throw new Error('Ticket no encontrado');
+   const anterior=t.responsableId??'(sin responsable)';
+   t.responsableId=input.nuevoResponsableId;
+   d.activities.unshift(activity({ticketId:id,text:`Reasignada por ${input.actorId}. Responsable: ${anterior} → ${input.nuevoResponsableId}.`,visibility:'Nota interna'}));
+  },()=>api.reasignar(id,input))
+ }
+ async function agregarColaborador(id:string,input:ColaboradorInput){
+  await mutate(d=>{
+   const t=d.tickets.find(t=>t.id===id);if(!t)throw new Error('Ticket no encontrado');
+   if(t.colaboradores.some(c=>c.colaboradorId===input.colaboradorId))throw new Error('El colaborador ya está asociado a esta solicitud.');
+   t.colaboradores.push({ticketId:id,colaboradorId:input.colaboradorId});
+   d.activities.unshift(activity({ticketId:id,text:`Colaborador agregado: ${input.colaboradorId}.`,visibility:'Nota interna'}));
+  },()=>api.agregarColaborador(id,input))
+ }
+ return {data,loading,ready,error,load,create,changeStatus,addActivity,tomarSolicitud,reasignar,agregarColaborador}
 })

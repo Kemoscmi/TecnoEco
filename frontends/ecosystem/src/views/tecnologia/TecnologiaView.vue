@@ -11,11 +11,15 @@ import Message from 'primevue/message'
 import { useToast } from 'primevue/usetoast'
 import { useTecnologiaStore } from '@/stores/tecnologia.store'
 import { statuses,categorias,type Activity,type Status } from '@/types/tecnologia'
+// REQ-005: en demo el actor es un ID fijo. En producción vendrá del perfil autenticado.
+const ACTOR_ID='tecnologia-demo'
 const store=useTecnologiaStore(),route=useRoute(),router=useRouter(),toast=useToast()
 const section=computed(()=>route.params.section),query=ref(''),categoria=ref('Todos'),status=ref('Todos'),generalOpen=ref(false),selectedId=ref<string|null>(null),busy=ref(false)
 const selected=computed(()=>store.data.tickets.find(t=>t.id===selectedId.value))
-const detailOpen=computed({get:()=>!!selected.value,set:(v:boolean)=>{if(!v){selectedId.value=null;note.value=''}}})
+const detailOpen=computed({get:()=>!!selected.value,set:(v:boolean)=>{if(!v){selectedId.value=null;note.value='';nuevoColaborador.value='';reasignarId.value=''}}})
 const note=ref(''),visibility=ref<Activity['visibility']>('Nota interna'),general=ref('')
+// REQ-005
+const nuevoColaborador=ref(''),reasignarId=ref('')
 const filtered=computed(()=>store.data.tickets.filter(t=>(t.title+' '+t.id+' '+t.solicitanteId).toLocaleLowerCase().includes(query.value.toLocaleLowerCase())&&(categoria.value==='Todos'||t.categoria===categoria.value)&&(status.value==='Todos'||t.estado===status.value)))
 const stats=computed(()=>[{label:'Tickets abiertos',value:store.data.tickets.filter(t=>t.estado!=='Resuelta'&&t.estado!=='Rechazada').length,icon:'pi-ticket'},{label:'En proceso',value:store.data.tickets.filter(t=>t.estado==='En proceso').length,icon:'pi-code'},{label:'Necesitamos información',value:store.data.tickets.filter(t=>t.estado==='Necesitamos información').length,icon:'pi-check-square'},{label:'Resueltos',value:store.data.tickets.filter(t=>t.estado==='Resuelta').length,icon:'pi-check-circle'}])
 const ticketEvents=computed(()=>store.data.activities.filter(e=>e.ticketId===selectedId.value))
@@ -25,6 +29,10 @@ async function run(action:()=>Promise<void>){busy.value=true;try{await action();
 async function saveNote(){if(!note.value.trim()||!selected.value)return;await run(async()=>{await store.addActivity({ticketId:selectedId.value,text:note.value.trim(),visibility:visibility.value});note.value=''})}
 async function saveGeneral(){if(!general.value.trim())return;await run(async()=>{await store.addActivity({ticketId:null,text:general.value.trim(),visibility:'Nota interna'});general.value='';generalOpen.value=false})}
 function changeStatus(value:Status){if(selected.value&&value!==selected.value.estado)void run(()=>store.changeStatus(selected.value!.id,value))}
+// REQ-005
+async function tomarSolicitud(){if(!selected.value)return;await run(()=>store.tomarSolicitud(selected.value!.id,{actorId:ACTOR_ID}))}
+async function reasignar(){if(!reasignarId.value.trim()||!selected.value)return;await run(async()=>{await store.reasignar(selected.value!.id,{actorId:ACTOR_ID,nuevoResponsableId:reasignarId.value.trim()});reasignarId.value=''})}
+async function agregarColaborador(){if(!nuevoColaborador.value.trim()||!selected.value)return;await run(async()=>{await store.agregarColaborador(selected.value!.id,{colaboradorId:nuevoColaborador.value.trim()});nuevoColaborador.value=''})}
 onMounted(()=>store.load())
 </script>
 <template><div class="page"><div class="page-heading"><div><h1>Tecnología</h1><p>Un espacio para reportar, resolver y dejar constancia.</p></div><Button label="Nueva solicitud" icon="pi pi-plus" :disabled="!store.ready||busy" @click="router.push('/tecnologia/solicitudes/nueva')"/></div>
@@ -36,6 +44,32 @@ onMounted(()=>store.load())
 <div v-else-if="section==='tablero'" class="board"><section v-for="column in statuses" :key="column" class="board-column"><h2>{{column}} <small>{{store.data.tickets.filter(t=>t.estado===column).length}}</small></h2><button v-for="ticket in store.data.tickets.filter(t=>t.estado===column)" :key="ticket.id" class="board-card" @click="selectedId=ticket.id"><small>{{ticket.categoria}} · {{ticket.id.slice(0,14)}}</small><strong>{{ticket.title}}</strong><p>{{ticket.responsableId ?? 'Sin responsable'}}</p></button><p v-if="!store.data.tickets.some(t=>t.estado===column)" class="empty">Sin tickets</p></section></div>
 <section v-else class="panel"><div class="panel-heading"><div><h2>Bitácora general</h2><small>Avances, cambios de estado y actividades del equipo.</small></div><Button label="Registrar actividad" icon="pi pi-plus" :disabled="!store.ready||busy" @click="generalOpen=true"/></div><div class="timeline"><article v-for="event in store.data.activities" :key="event.id"><button v-if="event.ticketId" class="text-link" @click="selectedId=event.ticketId">{{event.ticketId.slice(0,14)}}</button><b v-else>Actividad general</b><p>{{event.text}}</p><small>{{date(event.createdAt)}} · {{event.visibility}}</small></article><p v-if="!store.data.activities.length" class="empty">Registra la primera actividad del equipo.</p></div></section>
 
-<Dialog v-model:visible="detailOpen" modal :header="selected?.id.slice(0,14)" :style="{width:'740px'}" :breakpoints="{'780px':'95vw'}"><template v-if="selected"><h2>{{selected.title}}</h2><p class="description">{{selected.description}}</p><div class="detail-meta"><Tag :value="selected.categoria" severity="secondary"/><span>{{selected.solicitanteId}} · {{selected.responsableId ?? 'Sin responsable'}}</span></div><label for="ticket-status">Estado</label><Select inputId="ticket-status" :modelValue="selected.estado" :options="[...statuses]" :disabled="busy" @update:modelValue="changeStatus"/><h3>Bitácora del ticket</h3><div class="timeline"><article v-for="event in ticketEvents" :key="event.id"><p>{{event.text}}</p><small>{{date(event.createdAt)}} · {{event.visibility}}</small></article></div><form @submit.prevent="saveNote"><label for="note">Registrar avance o respuesta</label><Textarea id="note" v-model="note" required rows="3" maxlength="10000"/><label for="visibility">Visibilidad prevista</label><Select inputId="visibility" v-model="visibility" :options="['Nota interna','Respuesta al solicitante']"/><small class="hint">Clasificación para el futuro portal de clientes. Esta versión muestra la vista interna.</small><div class="actions"><Button type="submit" label="Guardar actividad" :loading="busy"/></div></form></template></Dialog>
+<Dialog v-model:visible="detailOpen" modal :header="selected?.id.slice(0,14)" :style="{width:'780px'}" :breakpoints="{'820px':'95vw'}"><template v-if="selected"><h2>{{selected.title}}</h2><p class="description">{{selected.description}}</p><div class="detail-meta"><Tag :value="selected.categoria" severity="secondary"/><span>Solicitante: {{selected.solicitanteId}}</span></div>
+<!-- REQ-005: asignación -->
+<div class="asignacion-panel">
+  <div class="asignacion-row">
+    <div class="asignacion-field"><span class="asig-label">Responsable</span><span class="asig-valor">{{selected.responsableId ?? 'Sin responsable'}}</span></div>
+    <div class="asignacion-actions">
+      <Button v-if="!selected.responsableId" label="Tomar solicitud" icon="pi pi-user-plus" size="small" :loading="busy" @click="tomarSolicitud"/>
+      <template v-else><InputText v-model="reasignarId" placeholder="ID nuevo responsable" size="small" maxlength="160" style="width:180px"/><Button label="Reasignar" size="small" :loading="busy" :disabled="!reasignarId.trim()" @click="reasignar"/></template>
+    </div>
+  </div>
+  <div class="asignacion-row" v-if="selected.responsableId">
+    <div class="asignacion-field"><span class="asig-label">Colaboradores</span><span v-if="!selected.colaboradores.length" class="asig-valor muted">Ninguno</span><div v-else class="colab-chips"><span v-for="c in selected.colaboradores" :key="c.colaboradorId" class="colab-chip">{{c.colaboradorId}}</span></div></div>
+    <div class="asignacion-actions"><InputText v-model="nuevoColaborador" placeholder="ID colaborador" size="small" maxlength="160" style="width:160px"/><Button label="Agregar" size="small" :loading="busy" :disabled="!nuevoColaborador.trim()" @click="agregarColaborador"/></div>
+  </div>
+</div>
+<label for="ticket-status">Estado</label><Select inputId="ticket-status" :modelValue="selected.estado" :options="[...statuses]" :disabled="busy" @update:modelValue="changeStatus"/><h3>Bitácora del ticket</h3><div class="timeline"><article v-for="event in ticketEvents" :key="event.id"><p>{{event.text}}</p><small>{{date(event.createdAt)}} · {{event.visibility}}</small></article></div><form @submit.prevent="saveNote"><label for="note">Registrar avance o respuesta</label><Textarea id="note" v-model="note" required rows="3" maxlength="10000"/><label for="visibility">Visibilidad prevista</label><Select inputId="visibility" v-model="visibility" :options="['Nota interna','Respuesta al solicitante']"/><small class="hint">Clasificación para el futuro portal de clientes. Esta versión muestra la vista interna.</small><div class="actions"><Button type="submit" label="Guardar actividad" :loading="busy"/></div></form></template></Dialog>
 <Dialog v-model:visible="generalOpen" modal header="Registrar actividad general" :style="{width:'560px'}" :breakpoints="{'600px':'95vw'}"><form @submit.prevent="saveGeneral"><label for="general">Actividad realizada</label><Textarea id="general" v-model="general" required rows="5" maxlength="10000" placeholder="Mantenimiento, revisión de equipos, actualización…"/><p>Se guardará como nota interna sin vincularla a un ticket.</p><div class="actions"><Button type="submit" label="Guardar actividad" :loading="busy"/></div></form></Dialog>
 </div></template>
+<style scoped>
+.asignacion-panel{margin:18px 0;padding:14px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;display:flex;flex-direction:column;gap:12px}
+.asignacion-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.asignacion-field{display:flex;align-items:center;gap:10px;flex:1}
+.asig-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#64748b;white-space:nowrap}
+.asig-valor{font-size:13px;color:#1e293b}
+.asig-valor.muted{color:#94a3b8}
+.asignacion-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.colab-chips{display:flex;flex-wrap:wrap;gap:6px}
+.colab-chip{background:#dbeafe;color:#1d4ed8;font-size:11px;padding:3px 9px;border-radius:12px;font-weight:500}
+</style>
