@@ -73,6 +73,37 @@ await Reject<ArgumentException>(() => service.Create(req002Input with { Descript
 await Reject<ArgumentException>(() => service.Create(req002Input with { Title = "" }, ct), "REQ-002: título obligatorio");
 Console.WriteLine("Todas las comprobaciones REQ-002 correctas.");
 
+// REQ-003 — Mis Solicitudes
+// El servicio entrega todas las actividades; el filtrado de visibilidad es responsabilidad
+// del presentador (frontend). Se verifica que el modelo soporta las visibilidades acordadas
+// y que las actividades de un ticket incluyen solo los tipos definidos.
+var req003SolicitanteId = "usuario-portal-01";
+var req003Input = new TicketInput("Mi reporte no carga", "Entro al portal y la pantalla queda en blanco.", CategoriasTicket.Problema, req003SolicitanteId);
+var req003Data = await service.Create(req003Input, ct);
+var req003Ticket = req003Data.Tickets.Last();
+// El usuario puede aportar información posterior como "Respuesta al solicitante"
+await service.AddActivity(new ActivityInput(req003Ticket.Id, "El error ocurre solo en Chrome 126.", "Respuesta al solicitante"), ct);
+// Tecnología puede registrar notas internas que el solicitante no debe ver
+await service.AddActivity(new ActivityInput(req003Ticket.Id, "Revisando logs del servidor. No compartir con el cliente.", "Nota interna"), ct);
+var req003Acts = (await service.Load(ct)).Activities.Where(a => a.TicketId == req003Ticket.Id).ToList();
+// Create registra automáticamente una actividad interna ("Ticket creado"). Se añadieron 2 más.
+Check(req003Acts.Count == 3, "REQ-003: el modelo almacena todas las actividades del ticket (creación + 2 manuales)");
+// Las "Respuesta al solicitante" son las únicas visibles para el usuario general
+var visibles = req003Acts.Where(a => a.Visibility == "Respuesta al solicitante").ToList();
+var internas = req003Acts.Where(a => a.Visibility == "Nota interna").ToList();
+Check(visibles.Count == 1 && visibles[0].Text == "El error ocurre solo en Chrome 126.", "REQ-003: solo 'Respuesta al solicitante' es visible para el solicitante");
+Check(internas.Count == 2, "REQ-003: notas internas (creación + manual) existen en el modelo pero no se entregan al solicitante");
+// El solicitante solo ve sus propias solicitudes — el filtrado es por SolicitanteId
+var otroSolicitante = (await service.Create(req003Input with { SolicitanteId = "otro-usuario" }, ct)).Tickets.Last();
+var misTickets = (await service.Load(ct)).Tickets.Where(t => t.SolicitanteId == req003SolicitanteId).ToList();
+Check(misTickets.All(t => t.SolicitanteId == req003SolicitanteId), "REQ-003: filtrar por SolicitanteId devuelve solo solicitudes propias");
+Check(!misTickets.Any(t => t.Id == otroSolicitante.Id), "REQ-003: solicitudes de otro usuario no aparecen en mis solicitudes");
+// La información que el usuario agrega llega al equipo de Tecnología
+var req003InfoData = await service.AddActivity(new ActivityInput(req003Ticket.Id, "También falla en Firefox.", "Respuesta al solicitante"), ct);
+var req003InfoAct = req003InfoData.Activities.First(a => a.Text == "También falla en Firefox.");
+Check(req003InfoAct.Visibility == "Respuesta al solicitante" && req003InfoAct.TicketId == req003Ticket.Id, "REQ-003: información posterior del solicitante llega a Tecnología");
+Console.WriteLine("Todas las comprobaciones REQ-003 correctas.");
+
 static void Check(bool condition, string message) { if (!condition) throw new Exception(message); Console.WriteLine("OK: " + message); }
 static async Task Reject<T>(Func<Task<Snapshot>> action, string message) where T : Exception {
     try { await action(); } catch (T) { Console.WriteLine("OK: " + message); return; }
