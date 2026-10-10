@@ -3,6 +3,10 @@ namespace Tecnologia.Application;
 public record TicketInput(string Title,string Description,string Categoria,string SolicitanteId);
 public record ActivityInput(string? TicketId,string Text,string Visibility);
 public record StatusInput(string Estado);
+// REQ-005: acciones de asignación. ActorId identifica al miembro de Tecnología que ejecuta la acción.
+public record TomarSolicitudInput(string ActorId);
+public record ReasignarInput(string ActorId,string NuevoResponsableId);
+public record ColaboradorInput(string ColaboradorId);
 public record Snapshot(List<Ticket> Tickets,List<Activity> Activities);
 public class TechnologyService(ITechnologyRepository repo) {
  // Los identificadores son opacos: no normalizar mayúsculas, espacios ni contenido.
@@ -18,6 +22,34 @@ public class TechnologyService(ITechnologyRepository repo) {
  public async Task<Snapshot> ChangeStatus(string id,StatusInput input,CancellationToken ct){
   var status=EstadosTicket.Validar(input.Estado);var ticket=await repo.Find(id,ct)??throw new KeyNotFoundException("Ticket no encontrado.");
   if(ticket.Estado!=status){repo.Add(new Activity{TicketId=id,Text=$"Estado actualizado: {ticket.Estado} → {status}."});ticket.Estado=status;await repo.Save(ct);}return await Load(ct);
+ }
+ // REQ-005 — Tomar solicitud: asigna responsable y, si estaba en Recibida, avanza a En proceso.
+ // "Tomar fuera de Recibida" queda sin regla definida; esta implementación asigna igualmente sin forzar transición.
+ public async Task<Snapshot> TomarSolicitud(string id,TomarSolicitudInput input,CancellationToken ct){
+  var actor=Identity(input.ActorId);
+  var ticket=await repo.Find(id,ct)??throw new KeyNotFoundException("Ticket no encontrado.");
+  ticket.ResponsableId=actor;
+  if(ticket.Estado==EstadosTicket.Recibida){ticket.Estado=EstadosTicket.EnProceso;repo.Add(new Activity{TicketId=id,Text=$"{actor} tomó la solicitud. Estado: Recibida → En proceso."});}
+  else{repo.Add(new Activity{TicketId=id,Text=$"{actor} tomó la solicitud."});}
+  await repo.Save(ct);return await Load(ct);
+ }
+ // REQ-005 — Reasignar: cambia responsable principal, conserva estado, registra actor, anterior, nuevo y momento UTC.
+ public async Task<Snapshot> Reasignar(string id,ReasignarInput input,CancellationToken ct){
+  var actor=Identity(input.ActorId);var nuevo=Identity(input.NuevoResponsableId);
+  var ticket=await repo.Find(id,ct)??throw new KeyNotFoundException("Ticket no encontrado.");
+  var anterior=ticket.ResponsableId??"(sin responsable)";
+  ticket.ResponsableId=nuevo;
+  repo.Add(new Activity{TicketId=id,Text=$"Reasignada por {actor}. Responsable: {anterior} → {nuevo}. {DateTimeOffset.UtcNow:u}"});
+  await repo.Save(ct);return await Load(ct);
+ }
+ // REQ-005 — Agregar colaborador: rechaza duplicados.
+ public async Task<Snapshot> AgregarColaborador(string id,ColaboradorInput input,CancellationToken ct){
+  var colaboradorId=Identity(input.ColaboradorId);
+  var ticket=await repo.Find(id,ct)??throw new KeyNotFoundException("Ticket no encontrado.");
+  if(ticket.Colaboradores.Any(c=>c.ColaboradorId==colaboradorId))throw new InvalidOperationException("El colaborador ya está asociado a esta solicitud.");
+  ticket.Colaboradores.Add(new TicketColaborador{TicketId=id,ColaboradorId=colaboradorId});
+  repo.Add(new Activity{TicketId=id,Text=$"Colaborador agregado: {colaboradorId}."});
+  await repo.Save(ct);return await Load(ct);
  }
  public async Task<Snapshot> AddActivity(ActivityInput input,CancellationToken ct){
   var text=Text(input.Text,10000);var visibility=Choice(input.Visibility,"Nota interna","Respuesta al solicitante");

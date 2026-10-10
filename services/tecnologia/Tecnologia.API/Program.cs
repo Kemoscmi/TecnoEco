@@ -10,10 +10,14 @@ var connection=builder.Configuration.GetConnectionString("TecnologiaDB")??throw 
 builder.Services.AddDbContext<TechnologyDbContext>(o=>o.UseMySql(connection,new MySqlServerVersion(new Version(8,0,36))));
 builder.Services.AddScoped<ITechnologyRepository,TechnologyRepository>();builder.Services.AddScoped<TechnologyService>();
 var app=builder.Build();
-app.Use(async(ctx,next)=>{try{await next(ctx);}catch(ArgumentException e){ctx.Response.StatusCode=400;await ctx.Response.WriteAsJsonAsync(new ApiError(e.Message));}catch(KeyNotFoundException e){ctx.Response.StatusCode=404;await ctx.Response.WriteAsJsonAsync(new ApiError(e.Message));}});
+app.Use(async(ctx,next)=>{try{await next(ctx);}catch(ArgumentException e){ctx.Response.StatusCode=400;await ctx.Response.WriteAsJsonAsync(new ApiError(e.Message));}catch(KeyNotFoundException e){ctx.Response.StatusCode=404;await ctx.Response.WriteAsJsonAsync(new ApiError(e.Message));}catch(InvalidOperationException e){ctx.Response.StatusCode=409;await ctx.Response.WriteAsJsonAsync(new ApiError(e.Message));}});
 app.MapGet("/health",()=>Results.Ok(new {status="ok",service="Tecnologia.API"}));
 app.MapGet("/api/tecnologia",(TechnologyService service,CancellationToken ct)=>service.Load(ct));
 app.MapPost("/api/tecnologia/tickets",(TicketInput input,TechnologyService service,CancellationToken ct)=>service.Create(input,ct));
 app.MapPatch("/api/tecnologia/tickets/{id}/status",(string id,StatusInput input,TechnologyService service,CancellationToken ct)=>service.ChangeStatus(id,input,ct));
+// REQ-005: acciones de asignación
+app.MapPost("/api/tecnologia/tickets/{id}/tomar",(string id,TomarSolicitudInput input,TechnologyService service,CancellationToken ct)=>service.TomarSolicitud(id,input,ct));
+app.MapPatch("/api/tecnologia/tickets/{id}/responsable",(string id,ReasignarInput input,TechnologyService service,CancellationToken ct)=>service.Reasignar(id,input,ct));
+app.MapPost("/api/tecnologia/tickets/{id}/colaboradores",(string id,ColaboradorInput input,TechnologyService service,CancellationToken ct)=>service.AgregarColaborador(id,input,ct));
 app.MapPost("/api/tecnologia/activities",(ActivityInput input,TechnologyService service,CancellationToken ct)=>service.AddActivity(input,ct));
 app.Run();
