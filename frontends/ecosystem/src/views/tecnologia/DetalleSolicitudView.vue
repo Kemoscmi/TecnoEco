@@ -160,42 +160,73 @@ onMounted(() => store.load())
             </div>
           </section>
 
-          <!-- Conversación (solo respuestas visibles) -->
+          <!-- REQ-009: Agregar comentario / nota interna -->
           <section class="panel detalle-card">
             <div class="card-header">
-              <i class="pi pi-comments"/> <h2>Conversación</h2>
-              <small>Mensajes visibles para el solicitante</small>
+              <i class="pi pi-pencil"/> <h2>Registrar actividad</h2>
+            </div>
+            <div class="card-body">
+              <!-- Selector de tipo con diferenciación visual clara (REQ-009) -->
+              <div class="tipo-tabs">
+                <button type="button"
+                  :class="['tipo-tab', 'tipo-tab-interno', { active: visibility === 'Nota interna' }]"
+                  @click="visibility = 'Nota interna'">
+                  <i class="pi pi-lock"/> Nota interna
+                </button>
+                <button type="button"
+                  :class="['tipo-tab', 'tipo-tab-respuesta', { active: visibility === 'Respuesta al solicitante' }]"
+                  @click="visibility = 'Respuesta al solicitante'">
+                  <i class="pi pi-send"/> Respuesta al solicitante
+                </button>
+              </div>
+
+              <!-- Banner de advertencia / confirmación (REQ-009) -->
+              <div :class="['vis-banner', visibility === 'Nota interna' ? 'banner-interno' : 'banner-respuesta']">
+                <i :class="['pi', visibility === 'Nota interna' ? 'pi-lock' : 'pi-eye']"/>
+                <span v-if="visibility === 'Nota interna'">
+                  <strong>Solo visible para Tecnología.</strong>
+                  El solicitante <em>no</em> verá este mensaje.
+                </span>
+                <span v-else>
+                  <strong>Visible para el solicitante</strong> en su portal de solicitudes.
+                </span>
+              </div>
+
+              <form :class="['conv-form', visibility === 'Nota interna' ? 'form-interno' : 'form-respuesta']"
+                @submit.prevent="guardarActividad">
+                <Textarea v-model="note" rows="3" maxlength="10000"
+                  :placeholder="visibility === 'Nota interna'
+                    ? 'Avance interno, diagnóstico, observación del equipo…'
+                    : 'Respuesta o información que el solicitante necesita saber…'"/>
+                <div class="conv-form-footer">
+                  <Button type="submit"
+                    :label="visibility === 'Nota interna' ? 'Guardar nota' : 'Enviar respuesta'"
+                    :icon="visibility === 'Nota interna' ? 'pi pi-save' : 'pi pi-send'"
+                    :severity="visibility === 'Nota interna' ? 'secondary' : 'primary'"
+                    size="small" :loading="busy" :disabled="!note.trim()"/>
+                </div>
+              </form>
+            </div>
+          </section>
+
+          <!-- Conversación (solo respuestas visibles al solicitante) -->
+          <section class="panel detalle-card">
+            <div class="card-header">
+              <i class="pi pi-comments"/> <h2>Conversación con el solicitante</h2>
+              <small class="badge-respuesta">Visible para el solicitante</small>
             </div>
             <div class="card-body">
               <div v-if="conversacion.length" class="conv-list">
-                <article v-for="msg in conversacion" :key="msg.id" class="conv-msg">
+                <article v-for="msg in conversacion" :key="msg.id" class="conv-msg conv-msg-respuesta">
                   <div class="conv-msg-header">
-                    <i class="pi pi-user conv-avatar"/>
-                    <span class="conv-autor">Solicitante</span>
+                    <i class="pi pi-send conv-avatar-respuesta"/>
+                    <span class="conv-autor">Respuesta al solicitante</span>
                     <small>{{ date(msg.createdAt) }}</small>
                   </div>
                   <p class="conv-texto">{{ msg.text }}</p>
                 </article>
               </div>
-              <p v-else class="empty">Aún no hay mensajes en la conversación.</p>
-
-              <!-- Formulario de actividad -->
-              <form class="conv-form" @submit.prevent="guardarActividad">
-                <Textarea v-model="note" rows="3" maxlength="10000"
-                  placeholder="Registra un avance, nota o respuesta al solicitante…"/>
-                <div class="conv-form-footer">
-                  <Select v-model="visibility"
-                    :options="['Nota interna','Respuesta al solicitante']"
-                    aria-label="Visibilidad"/>
-                  <small class="hint-vis">
-                    {{ visibility === 'Nota interna'
-                      ? 'Solo visible para Tecnología.'
-                      : 'Visible para el solicitante en su portal.' }}
-                  </small>
-                  <Button type="submit" label="Guardar" icon="pi pi-send"
-                    size="small" :loading="busy" :disabled="!note.trim()"/>
-                </div>
-              </form>
+              <p v-else class="empty">Aún no hay mensajes enviados al solicitante.</p>
             </div>
           </section>
 
@@ -203,14 +234,22 @@ onMounted(() => store.load())
           <section class="panel detalle-card">
             <div class="card-header">
               <i class="pi pi-history"/> <h2>Línea de tiempo</h2>
-              <small>Trazabilidad completa de la solicitud</small>
+              <small>Trazabilidad completa · solo visible para Tecnología</small>
             </div>
             <div class="card-body">
               <div v-if="lineaDeTiempo.length" class="timeline">
-                <article v-for="ev in lineaDeTiempo" :key="ev.id">
+                <!-- REQ-009: diferenciación visual por tipo en la trazabilidad -->
+                <article v-for="ev in lineaDeTiempo" :key="ev.id"
+                  :class="['tl-entry', ev.visibility === 'Nota interna' ? 'tl-interno' : 'tl-respuesta']">
                   <div class="tl-top">
                     <i :class="['pi', tipoEvento(ev).icon, 'tl-icon']"/>
                     <span class="tl-tipo">{{ tipoEvento(ev).label }}</span>
+                    <span v-if="ev.visibility === 'Nota interna'" class="tl-badge tl-badge-interno">
+                      <i class="pi pi-lock"/> Interno
+                    </span>
+                    <span v-else-if="ev.visibility === 'Respuesta al solicitante'" class="tl-badge tl-badge-respuesta">
+                      <i class="pi pi-eye"/> Al solicitante
+                    </span>
                     <small>{{ date(ev.createdAt) }}</small>
                   </div>
                   <p>{{ ev.text }}</p>
@@ -343,24 +382,77 @@ onMounted(() => store.load())
 .adjuntos-placeholder p { margin: 0 0 6px; font-size: 13px; }
 .adjuntos-placeholder abbr { text-decoration: none; font-weight: 600; }
 
-/* Conversación */
-.conv-list { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
-.conv-msg { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; }
-.conv-msg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.conv-avatar { font-size: 16px; color: #3b82f6; }
-.conv-autor  { font-size: 12px; font-weight: 600; }
-.conv-msg-header small { margin-left: auto; }
-.conv-texto  { margin: 0; font-size: 13px; line-height: 1.65; white-space: pre-wrap; }
-.conv-form   { display: flex; flex-direction: column; gap: 8px; }
+/* REQ-009: Selector de tipo con diferenciación visual */
+.tipo-tabs {
+  display: flex; gap: 0; border: 1px solid #e2e8f0; border-radius: 8px;
+  overflow: hidden; margin-bottom: 12px;
+}
+.tipo-tab {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  gap: 7px; padding: 9px 14px; border: 0; background: #f8fafc;
+  font-size: 13px; font-weight: 500; cursor: pointer; color: #64748b;
+  transition: background .15s, color .15s;
+}
+.tipo-tab:first-child { border-right: 1px solid #e2e8f0; }
+.tipo-tab-interno.active  { background: #fffbeb; color: #92400e; font-weight: 700; }
+.tipo-tab-respuesta.active { background: #eff6ff; color: #1d4ed8; font-weight: 700; }
+.tipo-tab:not(.active):hover { background: #f1f5f9; color: #334155; }
+
+/* REQ-009: Banner de advertencia / confirmación */
+.vis-banner {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 14px; border-radius: 7px; font-size: 12px;
+  margin-bottom: 12px; line-height: 1.5;
+}
+.banner-interno  { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+.banner-interno i { color: #d97706; margin-top: 1px; }
+.banner-respuesta { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+.banner-respuesta i { color: #3b82f6; margin-top: 1px; }
+
+/* REQ-009: Formulario con borde indicativo del tipo */
+.conv-form { display: flex; flex-direction: column; gap: 8px; }
+.conv-form.form-interno .p-textarea  { border-color: #fbbf24 !important; }
+.conv-form.form-respuesta .p-textarea { border-color: #93c5fd !important; }
 .conv-form .p-textarea { width: 100%; }
 .conv-form-footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.hint-vis { flex: 1; font-size: 11px; color: #64748b; }
 
-/* Línea de tiempo */
-.tl-top  { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+/* Conversación con solicitante */
+.conv-list { display: flex; flex-direction: column; gap: 14px; }
+.conv-msg { border-radius: 8px; padding: 14px 16px; }
+.conv-msg-respuesta { background: #eff6ff; border: 1px solid #bfdbfe; }
+.conv-msg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.conv-avatar-respuesta { font-size: 16px; color: #3b82f6; }
+.conv-autor  { font-size: 12px; font-weight: 600; color: #1d4ed8; }
+.conv-msg-header small { margin-left: auto; color: #64748b; }
+.conv-texto  { margin: 0; font-size: 13px; line-height: 1.65; white-space: pre-wrap; }
+
+/* Badge encabezado conversación */
+.badge-respuesta {
+  font-size: 11px; padding: 2px 8px; border-radius: 10px;
+  background: #dbeafe; color: #1d4ed8; font-weight: 600;
+}
+
+/* REQ-009: Línea de tiempo con diferenciación visual por tipo */
+.tl-entry { padding: 10px 12px; border-radius: 7px; border-left: 3px solid transparent; margin-bottom: 2px; }
+.tl-interno  { background: #fffbeb; border-left-color: #fbbf24; }
+.tl-respuesta { background: #eff6ff; border-left-color: #93c5fd; }
+/* Entradas de sistema (sin visibility explícita) se muestran en gris claro */
+.tl-entry:not(.tl-interno):not(.tl-respuesta) { background: #f8fafc; border-left-color: #e2e8f0; }
+
+.tl-top  { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
 .tl-icon { font-size: 13px; color: #3b82f6; }
 .tl-tipo { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #64748b; flex: 1; }
 .tl-top small { color: #94a3b8; }
+
+/* REQ-009: Badges de visibilidad en la timeline */
+.tl-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 10px;
+  text-transform: uppercase; letter-spacing: .4px;
+}
+.tl-badge-interno  { background: #fef3c7; color: #92400e; }
+.tl-badge-respuesta { background: #dbeafe; color: #1d4ed8; }
+.tl-badge i { font-size: 9px; }
 
 /* Zona derecha */
 .detalle-der { display: flex; flex-direction: column; gap: 14px; }
