@@ -51,6 +51,28 @@ Check(evento.FechaUtc.Offset == TimeSpan.Zero && evento.FechaUtc.Hour == 15 && e
 await PersistenceChecks.Run();
 Console.WriteLine("Todas las comprobaciones REQ-001 correctas.");
 
+// REQ-002 — Crear Solicitud
+// La solicitud nace en estado Recibida y no genera trabajo técnico automáticamente.
+var req002Input = new TicketInput("Solicitud de acceso al portal", "Necesito acceso al portal de reportes para revisar los indicadores del mes.", CategoriasTicket.SolicitudDeAyuda, "solicitante-ext-01");
+var req002Data = await service.Create(req002Input, ct);
+var req002Ticket = req002Data.Tickets.Last();
+Check(req002Ticket.Estado == EstadosTicket.Recibida, "REQ-002: solicitud nace en estado Recibida");
+Check(req002Ticket.SolicitanteId == "solicitante-ext-01", "REQ-002: solicitante se preserva en la solicitud");
+Check(req002Ticket.Categoria == CategoriasTicket.SolicitudDeAyuda, "REQ-002: categoría registrada correctamente");
+Check(req002Ticket.Title == "Solicitud de acceso al portal", "REQ-002: título sin mutación");
+Check(req002Ticket.ResponsableId is null, "REQ-002: la solicitud no asigna responsable al crearse");
+// No existe trabajo técnico asociado al crear la solicitud — el modelo no tiene Work Items.
+Check(!req002Data.Tickets.Any(t => t.Id != req002Ticket.Id && t.Id.StartsWith("TEC-") && t.CreatedAt >= req002Ticket.CreatedAt && t != req002Ticket), "REQ-002: crear solicitud no genera trabajo técnico automático");
+// El solicitante puede ser Tecnología actuando por alguien más (ID opaco, sin impersonación implementada).
+var req002TecInput = req002Input with { SolicitanteId = "tecnologia-internal" };
+var req002TecTicket = (await service.Create(req002TecInput, ct)).Tickets.Last();
+Check(req002TecTicket.SolicitanteId == "tecnologia-internal", "REQ-002: Tecnología puede registrar una solicitud con su propio ID");
+// La descripción es obligatoria — la escritura es el elemento principal del formulario.
+await Reject<ArgumentException>(() => service.Create(req002Input with { Description = "   " }, ct), "REQ-002: descripción obligatoria (escritura como elemento principal)");
+// El título es obligatorio.
+await Reject<ArgumentException>(() => service.Create(req002Input with { Title = "" }, ct), "REQ-002: título obligatorio");
+Console.WriteLine("Todas las comprobaciones REQ-002 correctas.");
+
 static void Check(bool condition, string message) { if (!condition) throw new Exception(message); Console.WriteLine("OK: " + message); }
 static async Task Reject<T>(Func<Task<Snapshot>> action, string message) where T : Exception {
     try { await action(); } catch (T) { Console.WriteLine("OK: " + message); return; }
