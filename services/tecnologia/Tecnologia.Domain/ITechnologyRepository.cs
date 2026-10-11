@@ -7,5 +7,6 @@ public interface ITechnologyRepository {
  void Add(Ticket ticket);
  void Add(Activity activity);
  void Add(Adjunto adjunto);
+ void Add(TrabajoTecnicoRelacionado trabajoTecnico);
  Task Save(CancellationToken ct);
 }

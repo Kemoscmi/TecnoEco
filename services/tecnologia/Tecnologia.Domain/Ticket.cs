@@ -11,6 +11,7 @@ public class Ticket {
  public DateTimeOffset? EliminadoAt { get; set; }
  public string? EliminadoPorId { get; set; }
  public List<TicketColaborador> Colaboradores { get; set; } = [];
+ public List<TrabajoTecnicoRelacionado> TrabajosTecnicos { get; set; } = [];
  public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 public class Activity {

@@ -270,6 +270,24 @@ Check(req013Preservada.EliminadoAt is not null && req013Preservada.EliminadoAt.V
 Check(repo.Log.Any(a => a.TicketId == req013Eliminar.Id && a.Text.Contains("eliminada lógicamente por sol-013-02")), "REQ-013: eliminación registra trazabilidad interna");
 Console.WriteLine("Todas las comprobaciones REQ-013 correctas.");
 
+// REQ-014 — Relación Solicitud ↔ Trabajo técnico
+var req014Input = new TicketInput("Solicitud con trabajo técnico","Relación mínima sin crear módulo técnico.",CategoriasTicket.Problema,"sol-014-01");
+var req014TicketA = (await service.Create(req014Input, ct)).Tickets.Last();
+Check(req014TicketA.TrabajosTecnicos.Count == 0, "REQ-014: crear solicitud no crea trabajo técnico automáticamente");
+var req014RelacionA = await service.RelacionarTrabajoTecnico(req014TicketA.Id, new RelacionarTrabajoTecnicoInput("trabajo-001",TiposTrabajoTecnico.Bug,"tecnologia-01"), ct);
+var req014A = req014RelacionA.Tickets.Single(t => t.Id == req014TicketA.Id);
+Check(req014A.TrabajosTecnicos.Single().TrabajoTecnicoId == "trabajo-001" && req014A.TrabajosTecnicos.Single().TipoTrabajoTecnico == TiposTrabajoTecnico.Bug && req014A.TrabajosTecnicos.Single().RelacionadoPorId == "tecnologia-01", "REQ-014: relación conserva ID, tipo y actor");
+Check(req014A.Estado == EstadosTicket.Recibida, "REQ-014: relacionar trabajo técnico no cambia el estado");
+Check(req014RelacionA.Activities.Any(a => a.TicketId == req014TicketA.Id && a.Text.Contains("Trabajo técnico relacionado")), "REQ-014: relación registra trazabilidad interna");
+await service.RelacionarTrabajoTecnico(req014TicketA.Id, new RelacionarTrabajoTecnicoInput("trabajo-002",TiposTrabajoTecnico.Mejora,"tecnologia-01"), ct);
+Check((await service.Load(ct)).Tickets.Single(t => t.Id == req014TicketA.Id).TrabajosTecnicos.Count == 2, "REQ-014: una solicitud puede relacionarse con varios trabajos técnicos");
+var req014TicketB = (await service.Create(req014Input with { SolicitanteId = "sol-014-02" }, ct)).Tickets.Last();
+var req014RelacionB = await service.RelacionarTrabajoTecnico(req014TicketB.Id, new RelacionarTrabajoTecnicoInput("trabajo-001",TiposTrabajoTecnico.Bug,"tecnologia-02"), ct);
+Check(req014RelacionB.Tickets.Single(t => t.Id == req014TicketB.Id).TrabajosTecnicos.Single().TrabajoTecnicoId == "trabajo-001", "REQ-014: un trabajo técnico puede relacionarse con varias solicitudes");
+await Reject<InvalidOperationException>(() => service.RelacionarTrabajoTecnico(req014TicketA.Id, new RelacionarTrabajoTecnicoInput("trabajo-001",TiposTrabajoTecnico.Bug,"tecnologia-01"), ct), "REQ-014: rechaza relación duplicada");
+await Reject<ArgumentException>(() => service.RelacionarTrabajoTecnico(req014TicketA.Id, new RelacionarTrabajoTecnicoInput("trabajo-003","Inventado","tecnologia-01"), ct), "REQ-014: rechaza tipo técnico desconocido");
+Console.WriteLine("Todas las comprobaciones REQ-014 correctas.");
+
 static void Check(bool condition, string message) { if (!condition) throw new Exception(message); Console.WriteLine("OK: " + message); }
 static async Task Reject<T>(Func<Task<Snapshot>> action, string message) where T : Exception {
     try { await action(); } catch (T) { Console.WriteLine("OK: " + message); return; }
@@ -286,5 +304,6 @@ sealed class MemoryRepository : ITechnologyRepository {
     public void Add(Ticket ticket) => Items.Add(ticket);
     public void Add(Activity activity) => Log.Add(activity);
     public void Add(Adjunto adjunto) => Files.Add(adjunto);
+    public void Add(TrabajoTecnicoRelacionado trabajoTecnico) { }
     public Task Save(CancellationToken ct) => Task.CompletedTask;
 }
