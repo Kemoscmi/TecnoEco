@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Tecnologia.Domain;
 namespace Tecnologia.Infrastructure;
 public class TechnologyDbContext(DbContextOptions<TechnologyDbContext> options):DbContext(options){
- public DbSet<Ticket> Tickets=>Set<Ticket>();public DbSet<Activity> Activities=>Set<Activity>();public DbSet<Adjunto> Adjuntos=>Set<Adjunto>();
+ public DbSet<Ticket> Tickets=>Set<Ticket>();public DbSet<Activity> Activities=>Set<Activity>();public DbSet<Adjunto> Adjuntos=>Set<Adjunto>();public DbSet<Notificacion> Notificaciones=>Set<Notificacion>();
  protected override void OnModelCreating(ModelBuilder model){
   var t=model.Entity<Ticket>();t.ToTable("tecnologia_tickets");t.HasKey(x=>x.Id);t.Property(x=>x.Id).HasMaxLength(40);t.Property(x=>x.Title).HasMaxLength(140);t.Property(x=>x.Description).HasColumnType("text");
   foreach(var name in new[]{"Categoria","Estado"})t.Property<string>(name).HasMaxLength(40);
@@ -22,5 +22,6 @@ public class TechnologyDbContext(DbContextOptions<TechnologyDbContext> options):
   var a=model.Entity<Activity>();a.ToTable("tecnologia_actividades");a.HasKey(x=>x.Id);a.Property(x=>x.Id).HasMaxLength(40);a.Property(x=>x.TicketId).HasMaxLength(40);a.Property(x=>x.Text).HasColumnType("text");a.Property(x=>x.Visibility).HasMaxLength(40);a.HasOne<Ticket>().WithMany().HasForeignKey(x=>x.TicketId).OnDelete(DeleteBehavior.Restrict);
   // REQ-010: tabla de adjuntos (metadata únicamente; Url null hasta configurar storage)
   var adj=model.Entity<Adjunto>();adj.ToTable("tecnologia_adjuntos");adj.HasKey(x=>x.Id);adj.Property(x=>x.Id).HasMaxLength(40);adj.Property(x=>x.TicketId).HasMaxLength(40).IsRequired();adj.Property(x=>x.ActivityId).HasMaxLength(40);adj.Property(x=>x.Nombre).HasMaxLength(260).IsRequired();adj.Property(x=>x.Tipo).HasMaxLength(120);adj.Property(x=>x.Visibility).HasMaxLength(20);adj.Property(x=>x.Url).HasMaxLength(2000);adj.HasOne<Ticket>().WithMany().HasForeignKey(x=>x.TicketId).OnDelete(DeleteBehavior.Restrict);
+  var n=model.Entity<Notificacion>();n.ToTable("tecnologia_notificaciones");n.HasKey(x=>x.Id);n.Property(x=>x.Id).HasMaxLength(40);n.Property(x=>x.DestinatarioId).HasMaxLength(160).UseCollation("utf8mb4_bin").IsRequired();n.Property(x=>x.TicketId).HasMaxLength(40).IsRequired();n.Property(x=>x.TipoNotificacion).HasMaxLength(60).IsRequired();n.Property(x=>x.Mensaje).HasColumnType("text");n.HasIndex(x=>x.DestinatarioId);n.HasOne<Ticket>().WithMany().HasForeignKey(x=>x.TicketId).OnDelete(DeleteBehavior.Restrict);
  }
 }

@@ -16,11 +16,24 @@ public record RechazarInput(string Motivo);
 public record ReasignarInput(string ActorId,string NuevoResponsableId);
 public record ColaboradorInput(string ColaboradorId);
 public record Snapshot(List<Ticket> Tickets,List<Activity> Activities,List<Adjunto> Adjuntos);
-public class TechnologyService(ITechnologyRepository repo) {
+public record NotificacionesResult(List<Notificacion> Notificaciones);
+public class TechnologyService(ITechnologyRepository repo, INotificationPusher pusher) {
  // Los identificadores son opacos: no normalizar mayúsculas, espacios ni contenido.
  static string Identity(string? value){if(string.IsNullOrWhiteSpace(value)||value.Length>160)throw new ArgumentException("Identificador requerido (máximo 160 caracteres).");return value;}
  static string Text(string? value,int max){if(string.IsNullOrWhiteSpace(value)||value.Trim().Length>max)throw new ArgumentException($"Texto requerido (máximo {max} caracteres).");return value.Trim();}
  static string Choice(string? value,params string[] allowed){if(value is null||!allowed.Contains(value))throw new ArgumentException("Opción no válida.");return value;}
+ // REQ-015: registra la notificación y la encola para empujar por SignalR tras el save.
+ readonly List<Notificacion> _pending=[];
+ void Notificar(string destinatarioId,string ticketId,string tipo,string mensaje){
+  if(string.IsNullOrWhiteSpace(destinatarioId))return;
+  var n=new Notificacion{DestinatarioId=destinatarioId,TicketId=ticketId,TipoNotificacion=tipo,Mensaje=mensaje};
+  repo.Add(n);_pending.Add(n);
+ }
+ async Task SaveAndPush(CancellationToken ct){
+  await repo.Save(ct);
+  foreach(var n in _pending)await pusher.Push(n,ct);
+  _pending.Clear();
+ }
  public async Task<Snapshot> Load(CancellationToken ct)=>new(await repo.Tickets(ct),await repo.Activities(ct),await repo.Adjuntos(ct));
  // REQ-010: valida y normaliza el nombre de archivo
  static string FileName(string? value){if(string.IsNullOrWhiteSpace(value)||value.Trim().Length>260)throw new ArgumentException("Nombre de archivo requerido (máximo 260 caracteres).");return value.Trim();}
@@ -66,7 +79,9 @@ public class TechnologyService(ITechnologyRepository repo) {
  // Acción explícita de Tecnología. REQ-004 no define una matriz restrictiva de transiciones.
  public async Task<Snapshot> ChangeStatus(string id,StatusInput input,CancellationToken ct){
   var status=EstadosTicket.Validar(input.Estado);var ticket=await repo.Find(id,ct)??throw new KeyNotFoundException("Ticket no encontrado.");
-  if(ticket.Estado!=status){if(ticket.Estado==EstadosTicket.Recibida&&status!=EstadosTicket.Recibida)ticket.AbandonoRecibidaAt=DateTimeOffset.UtcNow;repo.Add(new Activity{TicketId=id,Text=$"Estado actualizado: {ticket.Estado} → {status}."});ticket.Estado=status;await repo.Save(ct);}return await Load(ct);
+  if(ticket.Estado!=status){if(ticket.Estado==EstadosTicket.Recibida&&status!=EstadosTicket.Recibida)ticket.AbandonoRecibidaAt=DateTimeOffset.UtcNow;repo.Add(new Activity{TicketId=id,Text=$"Estado actualizado: {ticket.Estado} → {status}."});
+   if(status==EstadosTicket.NecesitamosInformacion)Notificar(ticket.SolicitanteId,id,TiposNotificacion.NecesitamosInformacion,"Tecnología necesita información sobre tu solicitud.");
+   ticket.Estado=status;await SaveAndPush(ct);}return await Load(ct);
  }
  // REQ-005 — Tomar solicitud: asigna responsable y, si estaba en Recibida, avanza a En proceso.
  // "Tomar fuera de Recibida" queda sin regla definida; esta implementación asigna igualmente sin forzar transición.
@@ -104,7 +119,8 @@ public class TechnologyService(ITechnologyRepository repo) {
   ticket.Estado=EstadosTicket.Resuelta;
   repo.Add(new Activity{TicketId=id,Text=mensaje,Visibility="Respuesta al solicitante"});
   repo.Add(new Activity{TicketId=id,Text="Estado actualizado: "+EstadosTicket.Resuelta+". Resolución comunicada al solicitante.",Visibility="Nota interna"});
-  await repo.Save(ct);return await Load(ct);
+  Notificar(ticket.SolicitanteId,id,TiposNotificacion.SolicitudResuelta,"Tu solicitud ha sido resuelta.");
+  await SaveAndPush(ct);return await Load(ct);
  }
  // REQ-012 — Rechazo: requiere motivo obligatorio visible para el solicitante.
  public async Task<Snapshot> Rechazar(string id,RechazarInput input,CancellationToken ct){
@@ -114,7 +130,18 @@ public class TechnologyService(ITechnologyRepository repo) {
   ticket.Estado=EstadosTicket.Rechazada;
   repo.Add(new Activity{TicketId=id,Text=motivo,Visibility="Respuesta al solicitante"});
   repo.Add(new Activity{TicketId=id,Text="Estado actualizado: "+EstadosTicket.Rechazada+". Motivo comunicado al solicitante.",Visibility="Nota interna"});
-  await repo.Save(ct);return await Load(ct);
+  Notificar(ticket.SolicitanteId,id,TiposNotificacion.SolicitudRechazada,"Tu solicitud ha sido rechazada.");
+  await SaveAndPush(ct);return await Load(ct);
+ }
+ // REQ-015: consultar notificaciones de un destinatario (no filtra leídas; el presentador decide).
+ public async Task<NotificacionesResult> ObtenerNotificaciones(string destinatarioId,CancellationToken ct){
+  var id=Identity(destinatarioId);
+  return new(await repo.Notificaciones(id,ct));
+ }
+ // REQ-015: el destinatario marca una notificación como leída.
+ public async Task MarcarLeida(string notificacionId,CancellationToken ct){
+  var n=await repo.FindNotificacion(notificacionId,ct)??throw new KeyNotFoundException("Notificación no encontrada.");
+  n.Leida=true;await repo.Save(ct);
  }
  public async Task<Snapshot> AddActivity(ActivityInput input,CancellationToken ct){
   var text=Text(input.Text,10000);var visibility=Choice(input.Visibility,"Nota interna","Respuesta al solicitante");
@@ -124,6 +151,16 @@ public class TechnologyService(ITechnologyRepository repo) {
   repo.Add(activity);
   // REQ-010: adjuntos heredan la visibilidad de la actividad (publica | interna)
   if(input.TicketId is not null){var adjVis=visibility=="Respuesta al solicitante"?"publica":"interna";AddAdjuntos(repo,input.TicketId,activity.Id,input.Adjuntos,adjVis);}
-  await repo.Save(ct);return await Load(ct);
+  // REQ-015: actividades con visibilidad pública generan notificación al destinatario correcto.
+  if(input.TicketId is not null && visibility=="Respuesta al solicitante"){
+   var ticketNot=await repo.Find(input.TicketId,ct);
+   if(ticketNot is not null){
+    if(ticketNot.Estado==EstadosTicket.NecesitamosInformacion)
+     Notificar(ticketNot.ResponsableId??ticketNot.SolicitanteId,input.TicketId,TiposNotificacion.UsuarioRespondioAResponsable,"El usuario respondió a la solicitud que esperaba información.");
+    else
+     Notificar(ticketNot.SolicitanteId,input.TicketId,TiposNotificacion.TecnologiaRespondio,"Tecnología ha respondido a tu solicitud.");
+   }
+  }
+  await SaveAndPush(ct);return await Load(ct);
  }
 }

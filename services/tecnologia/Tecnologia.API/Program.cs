@@ -3,12 +3,17 @@ using Tecnologia.Application;
 using Tecnologia.Domain;
 using Tecnologia.Infrastructure;
 using Tecnologia.Shared;
+using Tecnologia.API;
 var builder=WebApplication.CreateBuilder(args);
 // Base de desarrollo: no exponer públicamente hasta implementar autenticación y autorización.
 if(!builder.Environment.IsDevelopment())throw new InvalidOperationException("Esta base solo admite Development hasta implementar autenticación y autorización.");
 var connection=builder.Configuration.GetConnectionString("TecnologiaDB")??throw new InvalidOperationException("Configura ConnectionStrings__TecnologiaDB para la nueva base independiente.");
 builder.Services.AddDbContext<TechnologyDbContext>(o=>o.UseMySql(connection,new MySqlServerVersion(new Version(8,0,36))));
-builder.Services.AddScoped<ITechnologyRepository,TechnologyRepository>();builder.Services.AddScoped<TechnologyService>();
+builder.Services.AddScoped<ITechnologyRepository,TechnologyRepository>();
+// REQ-015: SignalR para notificaciones en tiempo real
+builder.Services.AddSignalR();
+builder.Services.AddScoped<INotificationPusher,SignalRNotificationPusher>();
+builder.Services.AddScoped<TechnologyService>();
 var app=builder.Build();
 app.Use(async(ctx,next)=>{try{await next(ctx);}catch(ArgumentException e){ctx.Response.StatusCode=400;await ctx.Response.WriteAsJsonAsync(new ApiError(e.Message));}catch(KeyNotFoundException e){ctx.Response.StatusCode=404;await ctx.Response.WriteAsJsonAsync(new ApiError(e.Message));}catch(InvalidOperationException e){ctx.Response.StatusCode=409;await ctx.Response.WriteAsJsonAsync(new ApiError(e.Message));}});
 app.MapGet("/health",()=>Results.Ok(new {status="ok",service="Tecnologia.API"}));
@@ -26,4 +31,9 @@ app.MapPost("/api/tecnologia/activities",(ActivityInput input,TechnologyService 
 // REQ-012: resolución y rechazo — ambos requieren mensaje obligatorio visible para el solicitante
 app.MapPost("/api/tecnologia/tickets/{id}/resolver",(string id,ResolverInput input,TechnologyService service,CancellationToken ct)=>service.Resolver(id,input,ct));
 app.MapPost("/api/tecnologia/tickets/{id}/rechazar",(string id,RechazarInput input,TechnologyService service,CancellationToken ct)=>service.Rechazar(id,input,ct));
+// REQ-015: notificaciones del destinatario y marcar como leída
+app.MapGet("/api/tecnologia/notificaciones",(string destinatarioId,TechnologyService service,CancellationToken ct)=>service.ObtenerNotificaciones(destinatarioId,ct));
+app.MapPatch("/api/tecnologia/notificaciones/{id}/leer",(string id,TechnologyService service,CancellationToken ct)=>service.MarcarLeida(id,ct));
+// REQ-015: hub SignalR — el cliente conecta con ?destinatarioId=<id>
+app.MapHub<NotificacionesHub>("/hubs/notificaciones");
 app.Run();

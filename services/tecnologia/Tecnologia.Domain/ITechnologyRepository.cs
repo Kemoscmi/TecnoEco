@@ -8,5 +8,8 @@ public interface ITechnologyRepository {
  void Add(Activity activity);
  void Add(Adjunto adjunto);
  void Add(TrabajoTecnicoRelacionado trabajoTecnico);
+ void Add(Notificacion notificacion);
+ Task<List<Notificacion>> Notificaciones(string destinatarioId, CancellationToken ct);
+ Task<Notificacion?> FindNotificacion(string id, CancellationToken ct);
  Task Save(CancellationToken ct);
 }

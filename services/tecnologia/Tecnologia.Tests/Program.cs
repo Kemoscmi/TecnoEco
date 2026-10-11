@@ -3,7 +3,7 @@ using Tecnologia.Domain;
 using System.Text.Json;
 
 var repo = new MemoryRepository();
-var service = new TechnologyService(repo);
+var service = new TechnologyService(repo, new NullNotificationPusher());
 var ct = CancellationToken.None;
 var input = new TicketInput(" Error de guardado ", "Pasos para reproducir", CategoriasTicket.Problema, "Cliente-01");
 var data = await service.Create(input, ct);
@@ -288,6 +288,65 @@ await Reject<InvalidOperationException>(() => service.RelacionarTrabajoTecnico(r
 await Reject<ArgumentException>(() => service.RelacionarTrabajoTecnico(req014TicketA.Id, new RelacionarTrabajoTecnicoInput("trabajo-003","Inventado","tecnologia-01"), ct), "REQ-014: rechaza tipo técnico desconocido");
 Console.WriteLine("Todas las comprobaciones REQ-014 correctas.");
 
+// REQ-015 — Notificaciones de Solicitudes
+var req015Input = new TicketInput("Solicitud de notificación","Descripción de prueba para REQ-015.",CategoriasTicket.Consulta,"sol-015-01");
+var req015Ticket = (await service.Create(req015Input, ct)).Tickets.Last();
+// Tomar solicitud para que tenga responsable
+await service.TomarSolicitud(req015Ticket.Id, new TomarSolicitudInput("tecno-015"), ct);
+// Cambio de estado a NecesitamosInformacion → notifica al solicitante
+await service.ChangeStatus(req015Ticket.Id, new StatusInput(EstadosTicket.NecesitamosInformacion), ct);
+var not015NecInfo = repo.Nots.Where(n => n.TicketId == req015Ticket.Id && n.TipoNotificacion == TiposNotificacion.NecesitamosInformacion).ToList();
+Check(not015NecInfo.Count == 1 && not015NecInfo[0].DestinatarioId == "sol-015-01", "REQ-015: NecesitamosInformacion notifica al solicitante");
+// Respuesta del usuario mientras está en NecesitamosInformacion → notifica al responsable, NO cambia estado
+var notsBefore = repo.Nots.Count;
+await service.AddActivity(new ActivityInput(req015Ticket.Id,"Aquí está la información solicitada.","Respuesta al solicitante"), ct);
+var req015T = (await service.Load(ct)).Tickets.First(t => t.Id == req015Ticket.Id);
+Check(req015T.Estado == EstadosTicket.NecesitamosInformacion, "REQ-015: respuesta del usuario no cambia el estado");
+var notResponsable = repo.Nots.Where(n => n.TicketId == req015Ticket.Id && n.TipoNotificacion == TiposNotificacion.UsuarioRespondioAResponsable).ToList();
+Check(notResponsable.Count == 1 && notResponsable[0].DestinatarioId == "tecno-015", "REQ-015: respuesta mientras NecesitamosInformacion notifica al responsable");
+// No se notifican movimientos internos: asignación no genera notificación al solicitante
+var req015Ticket2 = (await service.Create(req015Input with { SolicitanteId = "sol-015-02" }, ct)).Tickets.Last();
+var notsBefore2 = repo.Nots.Where(n => n.TicketId == req015Ticket2.Id).Count();
+await service.TomarSolicitud(req015Ticket2.Id, new TomarSolicitudInput("tecno-015b"), ct);
+await service.AgregarColaborador(req015Ticket2.Id, new ColaboradorInput("colab-015"), ct);
+Check(repo.Nots.Where(n => n.TicketId == req015Ticket2.Id).Count() == notsBefore2, "REQ-015: asignación y colaboradores no generan notificaciones");
+// Resolver → notifica al solicitante con SolicitudResuelta
+await service.ChangeStatus(req015Ticket.Id, new StatusInput(EstadosTicket.EnProceso), ct);
+await service.Resolver(req015Ticket.Id, new ResolverInput("El problema ha sido resuelto."), ct);
+var notResuelta = repo.Nots.Where(n => n.TicketId == req015Ticket.Id && n.TipoNotificacion == TiposNotificacion.SolicitudResuelta).ToList();
+Check(notResuelta.Count == 1 && notResuelta[0].DestinatarioId == "sol-015-01", "REQ-015: Resolver notifica al solicitante");
+// Rechazar → notifica al solicitante con SolicitudRechazada
+var req015Ticket3 = (await service.Create(req015Input with { SolicitanteId = "sol-015-03" }, ct)).Tickets.Last();
+await service.Rechazar(req015Ticket3.Id, new RechazarInput("Fuera del alcance."), ct);
+var notRechazada = repo.Nots.Where(n => n.TicketId == req015Ticket3.Id && n.TipoNotificacion == TiposNotificacion.SolicitudRechazada).ToList();
+Check(notRechazada.Count == 1 && notRechazada[0].DestinatarioId == "sol-015-03", "REQ-015: Rechazar notifica al solicitante");
+// Respuesta al solicitante fuera de NecesitamosInformacion → TecnologiaRespondio
+var req015Ticket4 = (await service.Create(req015Input with { SolicitanteId = "sol-015-04" }, ct)).Tickets.Last();
+await service.AddActivity(new ActivityInput(req015Ticket4.Id,"Hemos revisado y respondido.","Respuesta al solicitante"), ct);
+var notTecResp = repo.Nots.Where(n => n.TicketId == req015Ticket4.Id && n.TipoNotificacion == TiposNotificacion.TecnologiaRespondio).ToList();
+Check(notTecResp.Count == 1 && notTecResp[0].DestinatarioId == "sol-015-04", "REQ-015: respuesta al solicitante fuera de NecesitamosInformacion genera TecnologiaRespondio");
+// Notas internas no generan notificaciones
+var notsAntes = repo.Nots.Where(n => n.TicketId == req015Ticket4.Id).Count();
+await service.AddActivity(new ActivityInput(req015Ticket4.Id,"Revisando logs internos.","Nota interna"), ct);
+Check(repo.Nots.Where(n => n.TicketId == req015Ticket4.Id).Count() == notsAntes, "REQ-015: notas internas no generan notificaciones");
+// Consultar y marcar como leída
+var nots015 = await service.ObtenerNotificaciones("sol-015-01", ct);
+Check(nots015.Notificaciones.Count > 0, "REQ-015: ObtenerNotificaciones devuelve notificaciones del destinatario");
+var primeraId = nots015.Notificaciones.First().Id;
+await service.MarcarLeida(primeraId, ct);
+var notsActualizadas = await service.ObtenerNotificaciones("sol-015-01", ct);
+Check(notsActualizadas.Notificaciones.First(n => n.Id == primeraId).Leida, "REQ-015: MarcarLeida actualiza el estado de la notificación");
+// Destinatario inexistente no produce error, devuelve lista vacía
+var notsSinDestinatario = await service.ObtenerNotificaciones("nadie", ct);
+Check(notsSinDestinatario.Notificaciones.Count == 0, "REQ-015: destinatario sin notificaciones devuelve lista vacía");
+try { await service.MarcarLeida("no-existe", ct); throw new Exception("REQ-015: MarcarLeida debe rechazar notificación inexistente"); } catch (KeyNotFoundException) { Console.WriteLine("OK: REQ-015: MarcarLeida rechaza notificación inexistente"); }
+// Cambiar a NecesitamosInformacion sin estado previo igual: solo genera una notificación
+var req015Ticket5 = (await service.Create(req015Input with { SolicitanteId = "sol-015-05" }, ct)).Tickets.Last();
+await service.ChangeStatus(req015Ticket5.Id, new StatusInput(EstadosTicket.NecesitamosInformacion), ct);
+await service.ChangeStatus(req015Ticket5.Id, new StatusInput(EstadosTicket.NecesitamosInformacion), ct);
+Check(repo.Nots.Count(n => n.TicketId == req015Ticket5.Id && n.TipoNotificacion == TiposNotificacion.NecesitamosInformacion) == 1, "REQ-015: cambio sin efecto no genera notificación duplicada");
+Console.WriteLine("Todas las comprobaciones REQ-015 correctas.");
+
 static void Check(bool condition, string message) { if (!condition) throw new Exception(message); Console.WriteLine("OK: " + message); }
 static async Task Reject<T>(Func<Task<Snapshot>> action, string message) where T : Exception {
     try { await action(); } catch (T) { Console.WriteLine("OK: " + message); return; }
@@ -297,6 +356,7 @@ sealed class MemoryRepository : ITechnologyRepository {
     public List<Ticket> Items { get; } = [];
     public List<Activity> Log { get; } = [];
     public List<Adjunto> Files { get; } = [];
+    public List<Notificacion> Nots { get; } = [];
     public Task<List<Ticket>> Tickets(CancellationToken ct) => Task.FromResult(Items.Where(t => t.EliminadoAt is null).ToList());
     public Task<List<Activity>> Activities(CancellationToken ct) => Task.FromResult(Log.ToList());
     public Task<List<Adjunto>> Adjuntos(CancellationToken ct) => Task.FromResult(Files.ToList());
@@ -305,5 +365,8 @@ sealed class MemoryRepository : ITechnologyRepository {
     public void Add(Activity activity) => Log.Add(activity);
     public void Add(Adjunto adjunto) => Files.Add(adjunto);
     public void Add(TrabajoTecnicoRelacionado trabajoTecnico) { }
+    public void Add(Notificacion notificacion) => Nots.Add(notificacion);
+    public Task<List<Notificacion>> Notificaciones(string destinatarioId, CancellationToken ct) => Task.FromResult(Nots.Where(n => n.DestinatarioId == destinatarioId).ToList());
+    public Task<Notificacion?> FindNotificacion(string id, CancellationToken ct) => Task.FromResult(Nots.FirstOrDefault(n => n.Id == id));
     public Task Save(CancellationToken ct) => Task.CompletedTask;
 }

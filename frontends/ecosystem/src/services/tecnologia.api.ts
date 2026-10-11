@@ -1,4 +1,4 @@
-import type { Snapshot, TicketInput, Status, ActivityInput, TomarSolicitudInput, ReasignarInput, ColaboradorInput, ResolverInput, RechazarInput, EditarSolicitudInput, EliminarSolicitudInput, RelacionarTrabajoTecnicoInput } from '@/types/tecnologia'
+import type { Snapshot, TicketInput, Status, ActivityInput, TomarSolicitudInput, ReasignarInput, ColaboradorInput, ResolverInput, RechazarInput, EditarSolicitudInput, EliminarSolicitudInput, RelacionarTrabajoTecnicoInput, NotificacionesResult } from '@/types/tecnologia'
 export const demoMode = import.meta.env.VITE_DATA_MODE !== 'api'
 async function request<T>(path:string,method='GET',body?:unknown):Promise<T>{
  const res=await fetch('/api/tecnologia'+path,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)})
@@ -20,4 +20,7 @@ export const api={
  // REQ-012
  resolver:(id:string,data:ResolverInput)=>request<Snapshot>('/tickets/'+id+'/resolver','POST',data),
  rechazar:(id:string,data:RechazarInput)=>request<Snapshot>('/tickets/'+id+'/rechazar','POST',data),
+ // REQ-015
+ notificaciones:(destinatarioId:string)=>request<NotificacionesResult>('/notificaciones?destinatarioId='+encodeURIComponent(destinatarioId)),
+ marcarLeida:(id:string)=>request<void>('/notificaciones/'+id+'/leer','PATCH'),
 }

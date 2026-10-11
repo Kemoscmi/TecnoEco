@@ -26,3 +26,8 @@ export interface RechazarInput { motivo:string }
 export interface EditarSolicitudInput { title:string; description:string; categoria:string; actorId:string }
 export interface EliminarSolicitudInput { actorId:string }
 export interface RelacionarTrabajoTecnicoInput { trabajoTecnicoId:string; tipoTrabajoTecnico:TipoTrabajoTecnico; actorId:string }
+// REQ-015
+export const tiposNotificacion = ['TecnologiaRespondio','NecesitamosInformacion','SolicitudResuelta','SolicitudRechazada','UsuarioRespondioAResponsable'] as const
+export type TipoNotificacion = typeof tiposNotificacion[number]
+export interface Notificacion { id:string; destinatarioId:string; ticketId:string; tipoNotificacion:TipoNotificacion; mensaje:string; leida:boolean; fechaUtc:string }
+export interface NotificacionesResult { notificaciones:Notificacion[] }
