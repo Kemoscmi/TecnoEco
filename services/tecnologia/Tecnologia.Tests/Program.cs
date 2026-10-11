@@ -149,6 +149,43 @@ await Reject<KeyNotFoundException>(() => service.Reasignar("no-existe", new Reas
 await Reject<ArgumentException>(() => service.Reasignar(req005Ticket.Id, new ReasignarInput("actor", " "), ct), "REQ-005: Reasignar rechaza ID de responsable vacío");
 Console.WriteLine("Todas las comprobaciones REQ-005 correctas.");
 
+// REQ-011 — Bitácora y trazabilidad
+// Verifica que cada acción genera el evento correspondiente en la bitácora
+var req011Input = new TicketInput("Ticket bitácora","Verificar eventos de trazabilidad.",CategoriasTicket.Problema,"sol-bita-01");
+var req011Data = await service.Create(req011Input, ct);
+var req011Ticket = req011Data.Tickets.Last();
+// Creación: el servicio registra automáticamente la actividad de creación
+var creaAct = req011Data.Activities.FirstOrDefault(a => a.TicketId == req011Ticket.Id && a.Text.Contains("Ticket creado"));
+Check(creaAct is not null, "REQ-011: creación de solicitud genera evento en bitácora");
+Check(creaAct!.Visibility == "Nota interna", "REQ-011: evento de creación es nota interna (no expuesto al solicitante)");
+// Cambio de estado: genera evento
+var estadoData = await service.ChangeStatus(req011Ticket.Id, new StatusInput(EstadosTicket.EnProceso), ct);
+Check(estadoData.Activities.Any(a => a.TicketId == req011Ticket.Id && a.Text.Contains("Estado actualizado")), "REQ-011: cambio de estado genera evento en bitácora");
+// Asignación (Tomar): genera evento
+var tomarData = await service.TomarSolicitud(req011Ticket.Id, new TomarSolicitudInput("tecno-01"), ct);
+Check(tomarData.Activities.Any(a => a.TicketId == req011Ticket.Id && a.Text.Contains("tomó la solicitud")), "REQ-011: asignación (tomar) genera evento en bitácora");
+// Reasignación: genera evento
+var reasigData = await service.Reasignar(req011Ticket.Id, new ReasignarInput("tecno-01", "tecno-02"), ct);
+Check(reasigData.Activities.Any(a => a.TicketId == req011Ticket.Id && a.Text.Contains("Reasignada")), "REQ-011: reasignación genera evento en bitácora");
+// Colaborador: genera evento
+var colabData = await service.AgregarColaborador(req011Ticket.Id, new ColaboradorInput("dev-bita-01"), ct);
+Check(colabData.Activities.Any(a => a.TicketId == req011Ticket.Id && a.Text.Contains("Colaborador agregado")), "REQ-011: agregar colaborador genera evento en bitácora");
+// Notas internas: visibilidad correcta
+var notaData = await service.AddActivity(new ActivityInput(req011Ticket.Id,"Diagnóstico interno: revisar logs.","Nota interna"),ct);
+Check(notaData.Activities.Any(a => a.TicketId==req011Ticket.Id && a.Visibility=="Nota interna" && a.Text.Contains("Diagnóstico")), "REQ-011: nota interna registrada con visibilidad correcta");
+// Respuesta al solicitante: visibilidad correcta (usuario recibe versión simplificada)
+var respData = await service.AddActivity(new ActivityInput(req011Ticket.Id,"Hemos revisado el problema y lo hemos resuelto.","Respuesta al solicitante"),ct);
+Check(respData.Activities.Any(a => a.TicketId==req011Ticket.Id && a.Visibility=="Respuesta al solicitante"), "REQ-011: respuesta al solicitante registrada con visibilidad correcta");
+// Bitácora general (sin ticket): siempre nota interna
+var generalData = await service.AddActivity(new ActivityInput(null,"Mantenimiento preventivo de servidores.","Nota interna"),ct);
+Check(generalData.Activities.Any(a => a.TicketId==null && a.Visibility=="Nota interna" && a.Text.Contains("Mantenimiento preventivo")), "REQ-011: actividad general de Tecnología registrada en bitácora sin ticket");
+// El usuario solo ve Respuesta al solicitante — el filtrado es responsabilidad del presentador
+var req011Visible = (await service.Load(ct)).Activities.Where(a => a.TicketId==req011Ticket.Id && a.Visibility=="Respuesta al solicitante").ToList();
+var req011Interna = (await service.Load(ct)).Activities.Where(a => a.TicketId==req011Ticket.Id && a.Visibility=="Nota interna").ToList();
+Check(req011Visible.Count >= 1, "REQ-011: al menos una respuesta visible para el solicitante");
+Check(req011Interna.Count > req011Visible.Count, "REQ-011: la bitácora interna tiene más eventos que la vista simplificada del solicitante");
+Console.WriteLine("Todas las comprobaciones REQ-011 correctas.");
+
 // REQ-010 — Archivos adjuntos
 var req010Input = new TicketInput("Solicitud con adjuntos","Necesito acceso; adjunto capturas.",CategoriasTicket.Problema,"sol-adj-01",
     [new AdjuntoInput("captura.png","image/png",102400),new AdjuntoInput("log.txt","text/plain",2048)]);
