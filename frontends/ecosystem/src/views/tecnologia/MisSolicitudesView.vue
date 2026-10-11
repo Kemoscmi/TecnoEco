@@ -8,6 +8,8 @@ import { useToast } from 'primevue/usetoast'
 import { useTecnologiaStore } from '@/stores/tecnologia.store'
 import type { Ticket } from '@/types/tecnologia'
 
+function formatSize(b: number) { return b < 1024 ? b + ' B' : b < 1048576 ? (b/1024).toFixed(1) + ' KB' : (b/1048576).toFixed(1) + ' MB' }
+
 // REQ-003: el usuario autenticado determina qué solicitudes se muestran.
 // En demo se usa el mismo ID simulado que CrearSolicitudView.
 // En producción este valor vendrá del perfil en sesión.
@@ -34,6 +36,14 @@ const selected = computed<Ticket | undefined>(() =>
 const historialVisible = computed(() =>
   store.data.activities.filter(
     a => a.ticketId === selectedId.value && a.visibility === 'Respuesta al solicitante'
+  )
+)
+
+// REQ-010: el solicitante solo ve adjuntos públicos (visibility='publica')
+// Incluye adjuntos de la solicitud original y de respuestas al solicitante.
+const adjuntosVisibles = computed(() =>
+  store.data.adjuntos.filter(
+    a => a.ticketId === selectedId.value && a.visibility === 'publica'
   )
 )
 
@@ -134,6 +144,23 @@ onMounted(() => store.load())
         <h2 class="detalle-titulo">{{ selected.title }}</h2>
         <p class="detalle-desc">{{ selected.description }}</p>
         <small>Enviada el {{ date(selected.createdAt) }}</small>
+      </div>
+
+      <!-- REQ-010: adjuntos públicos del ticket -->
+      <div v-if="adjuntosVisibles.length" class="historial panel">
+        <div class="panel-heading">
+          <h2>Archivos adjuntos</h2>
+        </div>
+        <div class="adj-lista">
+          <div v-for="adj in adjuntosVisibles" :key="adj.id" class="adj-chip">
+            <i class="pi pi-file adj-icon"/>
+            <span class="adj-nombre">{{ adj.nombre }}</span>
+            <small class="adj-size">{{ formatSize(adj.tamaño) }}</small>
+            <span class="adj-pending" title="Descarga pendiente de configuración de storage">
+              <i class="pi pi-clock"/> Pendiente
+            </span>
+          </div>
+        </div>
       </div>
 
       <!-- Historial simplificado: solo respuestas visibles al solicitante -->
@@ -258,6 +285,13 @@ onMounted(() => store.load())
 .detalle-desc { white-space: pre-wrap; margin: 0 0 16px; line-height: 1.7; }
 
 .historial .empty { padding: 0 22px 22px; }
+
+.adj-lista { padding: 14px 22px 18px; display: flex; flex-direction: column; gap: 6px; }
+.adj-chip { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px; }
+.adj-icon { color: #3b82f6; font-size: 14px; }
+.adj-nombre { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adj-size { color: #94a3b8; white-space: nowrap; }
+.adj-pending { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: #f59e0b; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 1px 6px; white-space: nowrap; }
 
 .agregar-form { padding: 18px 22px 22px; }
 .agregar-form label { font-size: 13px; font-weight: 600; margin-bottom: 10px; display: block; line-height: 1.6; }

@@ -22,6 +22,20 @@ const busy = ref(false)
 interface Form { titulo: string; descripcion: string; categoria: string }
 const form = reactive<Form>({ titulo: '', descripcion: '', categoria: categorias[0] })
 
+// REQ-010: archivos seleccionados (metadata únicamente; sin storage hasta REQ-010 fase 2)
+const archivos = ref<File[]>([])
+const fileInput = ref<HTMLInputElement | null>(null)
+
+function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (!input.files) return
+  const nuevos = Array.from(input.files).filter(f => !archivos.value.some(a => a.name === f.name && a.size === f.size))
+  archivos.value = [...archivos.value, ...nuevos]
+  input.value = ''
+}
+function quitarArchivo(idx: number) { archivos.value = archivos.value.filter((_, i) => i !== idx) }
+function formatSize(b: number) { return b < 1024 ? b + ' B' : b < 1048576 ? (b/1024).toFixed(1) + ' KB' : (b/1048576).toFixed(1) + ' MB' }
+
 const tituloValido = () => form.titulo.trim().length > 0 && form.titulo.trim().length <= 140
 const descripcionValida = () => form.descripcion.trim().length > 0 && form.descripcion.trim().length <= 10000
 
@@ -33,8 +47,8 @@ async function enviar() {
       title: form.titulo.trim(),
       description: form.descripcion.trim(),
       categoria: form.categoria,
-      // En producción: solicitanteId = usuario autenticado desde el perfil.
       solicitanteId: DEMO_SOLICITANTE_ID,
+      adjuntos: archivos.value.map(f => ({ nombre: f.name, tipo: f.type || 'application/octet-stream', tamaño: f.size })),
     })
     toast.add({ severity: 'success', summary: 'Solicitud creada', detail: 'Nació en estado Recibida.', life: 3000 })
     router.push('/tecnologia/tickets')
@@ -107,13 +121,25 @@ function cancelar() { router.push('/tecnologia/tickets') }
             />
           </div>
 
-          <!-- REQ-010 pendiente: adjuntos -->
-          <div class="adjuntos-placeholder">
+          <!-- REQ-010: adjuntos -->
+          <div class="adjuntos-campo">
             <label>Adjuntos</label>
-            <div class="adjuntos-inner">
-              <i class="pi pi-paperclip" />
-              <span>Archivos adjuntos disponibles próximamente · <abbr title="REQ-010 — Archivos adjuntos">REQ-010</abbr></span>
+            <div class="adjuntos-drop" @click="fileInput?.click()">
+              <i class="pi pi-paperclip"/>
+              <span>Haz clic para adjuntar archivos</span>
+              <small>Los archivos se registran como metadatos · descarga pendiente de storage</small>
             </div>
+            <input ref="fileInput" type="file" multiple class="file-hidden" @change="onFileChange"/>
+            <ul v-if="archivos.length" class="archivos-lista">
+              <li v-for="(f, i) in archivos" :key="i" class="archivo-chip">
+                <i class="pi pi-file"/>
+                <span>{{ f.name }}</span>
+                <small>{{ formatSize(f.size) }}</small>
+                <button type="button" class="quitar-btn" @click="quitarArchivo(i)">
+                  <i class="pi pi-times"/>
+                </button>
+              </li>
+            </ul>
           </div>
         </div>
 
@@ -209,20 +235,28 @@ function cancelar() { router.push('/tecnologia/tickets') }
 }
 .select-categoria { width: 100%; }
 
-.adjuntos-placeholder label { font-size: 12px; font-weight: 600; margin-bottom: 7px; display: block; }
-.adjuntos-inner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 13px 16px;
-  border: 1px dashed #cbd5e1;
-  border-radius: 8px;
-  color: #94a3b8;
-  font-size: 13px;
-  background: #f8fafc;
-  cursor: not-allowed;
+.adjuntos-campo label { font-size: 12px; font-weight: 600; margin-bottom: 7px; display: block; }
+.adjuntos-drop {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 16px; border: 1.5px dashed #93c5fd; border-radius: 8px;
+  color: #3b82f6; font-size: 13px; background: #f0f9ff; cursor: pointer;
+  transition: background .15s, border-color .15s; text-align: center;
 }
-.adjuntos-inner abbr { text-decoration: none; font-weight: 600; }
+.adjuntos-drop:hover { background: #dbeafe; border-color: #3b82f6; }
+.adjuntos-drop i { font-size: 18px; margin-bottom: 2px; }
+.adjuntos-drop small { color: #64748b; font-size: 11px; }
+.file-hidden { display: none; }
+.archivos-lista { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.archivo-chip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; background: #f8fafc; border: 1px solid #e2e8f0;
+  border-radius: 6px; font-size: 12px;
+}
+.archivo-chip i { color: #3b82f6; font-size: 13px; }
+.archivo-chip span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.archivo-chip small { color: #94a3b8; white-space: nowrap; }
+.quitar-btn { border: 0; background: none; color: #94a3b8; cursor: pointer; padding: 2px; line-height: 1; }
+.quitar-btn:hover { color: #ef4444; }
 
 .solicitante-demo {
   display: flex;

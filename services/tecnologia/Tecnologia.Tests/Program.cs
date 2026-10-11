@@ -149,6 +149,31 @@ await Reject<KeyNotFoundException>(() => service.Reasignar("no-existe", new Reas
 await Reject<ArgumentException>(() => service.Reasignar(req005Ticket.Id, new ReasignarInput("actor", " "), ct), "REQ-005: Reasignar rechaza ID de responsable vacío");
 Console.WriteLine("Todas las comprobaciones REQ-005 correctas.");
 
+// REQ-010 — Archivos adjuntos
+var req010Input = new TicketInput("Solicitud con adjuntos","Necesito acceso; adjunto capturas.",CategoriasTicket.Problema,"sol-adj-01",
+    [new AdjuntoInput("captura.png","image/png",102400),new AdjuntoInput("log.txt","text/plain",2048)]);
+var req010Data = await service.Create(req010Input, ct);
+var req010Ticket = req010Data.Tickets.Last();
+var adjTicket = req010Data.Adjuntos.Where(a => a.TicketId == req010Ticket.Id && a.ActivityId is null).ToList();
+Check(adjTicket.Count == 2, "REQ-010: adjuntos de solicitud original registrados");
+Check(adjTicket.All(a => a.Visibility == "publica"), "REQ-010: adjuntos de solicitud original son públicos");
+Check(adjTicket.All(a => a.Url is null), "REQ-010: URL de adjunto es null hasta configurar storage");
+// Adjunto en respuesta al solicitante → visibility publica
+var req010RespData = await service.AddActivity(new ActivityInput(req010Ticket.Id,"Adjunto la solución.","Respuesta al solicitante",
+    [new AdjuntoInput("solucion.pdf","application/pdf",51200)]),ct);
+var adjResp = req010RespData.Adjuntos.Where(a => a.TicketId == req010Ticket.Id && a.ActivityId is not null && a.Visibility == "publica").ToList();
+Check(adjResp.Count == 1, "REQ-010: adjunto de respuesta al solicitante es público");
+// Adjunto en nota interna → visibility interna (solicitante NO debe verlo)
+var req010NotaData = await service.AddActivity(new ActivityInput(req010Ticket.Id,"Debug interno.","Nota interna",
+    [new AdjuntoInput("debug.log","text/plain",4096)]),ct);
+var adjInterna = req010NotaData.Adjuntos.Where(a => a.Nombre == "debug.log").ToList();
+Check(adjInterna.Count == 1 && adjInterna[0].Visibility == "interna", "REQ-010: adjunto de nota interna es interno (no visible para el solicitante)");
+// Sin adjuntos: actividades y tickets sin adjuntos en el input no generan entradas
+var req010SinAdj = await service.Create(new TicketInput("Sin adjuntos","Prueba",CategoriasTicket.Consulta,"sol-sin-adj"),ct);
+var req010SinAdjTicket = req010SinAdj.Tickets.Last();
+Check(!req010SinAdj.Adjuntos.Any(a => a.TicketId == req010SinAdjTicket.Id), "REQ-010: ticket sin adjuntos en el input no genera entradas en Adjuntos");
+Console.WriteLine("Todas las comprobaciones REQ-010 correctas.");
+
 static void Check(bool condition, string message) { if (!condition) throw new Exception(message); Console.WriteLine("OK: " + message); }
 static async Task Reject<T>(Func<Task<Snapshot>> action, string message) where T : Exception {
     try { await action(); } catch (T) { Console.WriteLine("OK: " + message); return; }
@@ -157,10 +182,13 @@ static async Task Reject<T>(Func<Task<Snapshot>> action, string message) where T
 sealed class MemoryRepository : ITechnologyRepository {
     public List<Ticket> Items { get; } = [];
     public List<Activity> Log { get; } = [];
+    public List<Adjunto> Files { get; } = [];
     public Task<List<Ticket>> Tickets(CancellationToken ct) => Task.FromResult(Items.ToList());
     public Task<List<Activity>> Activities(CancellationToken ct) => Task.FromResult(Log.ToList());
+    public Task<List<Adjunto>> Adjuntos(CancellationToken ct) => Task.FromResult(Files.ToList());
     public Task<Ticket?> Find(string id, CancellationToken ct) => Task.FromResult(Items.FirstOrDefault(t => t.Id == id));
     public void Add(Ticket ticket) => Items.Add(ticket);
     public void Add(Activity activity) => Log.Add(activity);
+    public void Add(Adjunto adjunto) => Files.Add(adjunto);
     public Task Save(CancellationToken ct) => Task.CompletedTask;
 }
