@@ -10,5 +10,8 @@ public class TechnologyRepository(TechnologyDbContext db):ITechnologyRepository 
  public void Add(Activity activity)=>db.Activities.Add(activity);
  public void Add(Adjunto adjunto)=>db.Adjuntos.Add(adjunto);
  public void Add(TrabajoTecnicoRelacionado trabajoTecnico)=>db.Set<TrabajoTecnicoRelacionado>().Add(trabajoTecnico);
+ public void Add(Notificacion notificacion)=>db.Notificaciones.Add(notificacion);
+ public Task<List<Notificacion>> Notificaciones(string destinatarioId,CancellationToken ct)=>db.Notificaciones.Where(x=>x.DestinatarioId==destinatarioId).AsNoTracking().OrderByDescending(x=>x.FechaUtc).ToListAsync(ct);
+ public Task<Notificacion?> FindNotificacion(string id,CancellationToken ct)=>db.Notificaciones.FirstOrDefaultAsync(x=>x.Id==id,ct);
  public async Task Save(CancellationToken ct)=>await db.SaveChangesAsync(ct);
 }

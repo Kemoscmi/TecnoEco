@@ -26,4 +26,7 @@ app.MapPost("/api/tecnologia/activities",(ActivityInput input,TechnologyService 
 // REQ-012: resolución y rechazo — ambos requieren mensaje obligatorio visible para el solicitante
 app.MapPost("/api/tecnologia/tickets/{id}/resolver",(string id,ResolverInput input,TechnologyService service,CancellationToken ct)=>service.Resolver(id,input,ct));
 app.MapPost("/api/tecnologia/tickets/{id}/rechazar",(string id,RechazarInput input,TechnologyService service,CancellationToken ct)=>service.Rechazar(id,input,ct));
+// REQ-015: notificaciones del destinatario y marcar como leída
+app.MapGet("/api/tecnologia/notificaciones",(string destinatarioId,TechnologyService service,CancellationToken ct)=>service.ObtenerNotificaciones(destinatarioId,ct));
+app.MapPatch("/api/tecnologia/notificaciones/{id}/leer",(string id,TechnologyService service,CancellationToken ct)=>service.MarcarLeida(id,ct));
 app.Run();

@@ -29,6 +29,18 @@ CREATE TABLE IF NOT EXISTS tecnologia_ticket_trabajos_tecnicos (
  PRIMARY KEY (TicketId, TrabajoTecnicoId),
  CONSTRAINT FK_trabajos_tecnicos_tickets FOREIGN KEY (TicketId) REFERENCES tecnologia_tickets(Id) ON DELETE RESTRICT
 );
+-- REQ-015: registro de notificaciones. Canal (interno/correo) por definir.
+CREATE TABLE IF NOT EXISTS tecnologia_notificaciones (
+ Id varchar(40) NOT NULL PRIMARY KEY,
+ DestinatarioId varchar(160) COLLATE utf8mb4_bin NOT NULL,
+ TicketId varchar(40) NOT NULL,
+ TipoNotificacion varchar(60) NOT NULL,
+ Mensaje text NOT NULL,
+ Leida tinyint(1) NOT NULL DEFAULT 0,
+ FechaUtc datetime(6) NOT NULL,
+ INDEX IX_notificaciones_destinatario (DestinatarioId),
+ CONSTRAINT FK_notificaciones_tickets FOREIGN KEY (TicketId) REFERENCES tecnologia_tickets(Id) ON DELETE RESTRICT
+);
 CREATE TABLE IF NOT EXISTS tecnologia_actividades (
  Id varchar(40) NOT NULL PRIMARY KEY, TicketId varchar(40) NULL, Text text NOT NULL,
  Visibility varchar(40) NOT NULL, CreatedAt datetime(6) NOT NULL,
