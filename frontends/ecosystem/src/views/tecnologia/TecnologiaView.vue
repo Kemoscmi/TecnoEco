@@ -66,11 +66,40 @@ function abrirDetalle(id: string) {
   router.push('/tecnologia/solicitudes/' + id)
 }
 
-// ── Bitácora general ───────────────────────────────────────────────────
+// ── Bitácora general (REQ-011) ─────────────────────────────────────────
 const busy        = ref(false)
 const general     = ref('')
 const generalOpen = ref(false)
+const bitacoraQuery  = ref('')
+const bitacoraFiltro = ref<'todas' | 'interna' | 'solicitante'>('todas')
+
 const date = (s: string) => new Date(s).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
+
+// REQ-011: clasificación de eventos para la bitácora general
+import type { Activity } from '@/types/tecnologia'
+function tipoEvento(a: Activity) {
+  if (a.text.includes('tomó la solicitud'))          return { icon: 'pi-user-plus',              label: 'Asignación' }
+  if (a.text.includes('Reasignada'))                 return { icon: 'pi-arrow-right-arrow-left',  label: 'Reasignación' }
+  if (a.text.includes('Estado actualizado'))         return { icon: 'pi-refresh',                label: 'Cambio de estado' }
+  if (a.text.includes('Colaborador agregado'))       return { icon: 'pi-users',                  label: 'Colaborador' }
+  if (a.text.includes('Ticket creado'))              return { icon: 'pi-plus-circle',             label: 'Creación' }
+  if (a.text.includes('Trabajo técnico'))            return { icon: 'pi-wrench',                 label: 'Trabajo técnico' }
+  if (a.visibility === 'Respuesta al solicitante')   return { icon: 'pi-comment',                label: 'Respuesta al solicitante' }
+  return { icon: 'pi-info-circle',                                                               label: 'Nota interna' }
+}
+
+const bitacoraFiltrada = computed(() => {
+  return store.data.activities.filter(a => {
+    if (bitacoraFiltro.value === 'interna'    && a.visibility !== 'Nota interna')            return false
+    if (bitacoraFiltro.value === 'solicitante' && a.visibility !== 'Respuesta al solicitante') return false
+    if (bitacoraQuery.value.trim()) {
+      const q = bitacoraQuery.value.toLocaleLowerCase()
+      const haystack = (a.text + ' ' + (a.ticketId ?? '') + ' ' + tipoEvento(a).label).toLocaleLowerCase()
+      if (!haystack.includes(q)) return false
+    }
+    return true
+  })
+})
 
 async function run(action: () => Promise<void>) {
   busy.value = true
@@ -212,26 +241,90 @@ onMounted(() => store.load())
     </section>
   </div>
 
-  <!-- Bitácora general -->
-  <section v-else class="panel">
-    <div class="panel-heading">
-      <div><h2>Bitácora general</h2><small>Avances, cambios de estado y actividades del equipo.</small></div>
-      <Button label="Registrar actividad" icon="pi pi-plus"
-        :disabled="!store.ready||busy" @click="generalOpen=true"/>
-    </div>
-    <div class="timeline">
-      <article v-for="event in store.data.activities" :key="event.id">
-        <!-- REQ-008: enlace al detalle desde la bitácora -->
-        <button v-if="event.ticketId" class="text-link" @click="abrirDetalle(event.ticketId)">
-          {{ event.ticketId.slice(0,14) }}
-        </button>
-        <b v-else>Actividad general</b>
-        <p>{{ event.text }}</p>
-        <small>{{ date(event.createdAt) }} · {{ event.visibility }}</small>
-      </article>
-      <p v-if="!store.data.activities.length" class="empty">Registra la primera actividad del equipo.</p>
-    </div>
-  </section>
+  <!-- REQ-011: Bitácora general con búsqueda, filtros y visualización estructurada -->
+  <div v-else class="bitacora-layout">
+    <section class="panel bitacora-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Bitácora general</h2>
+          <small>Trazabilidad completa del equipo de Tecnología</small>
+        </div>
+        <Button label="Registrar actividad" icon="pi pi-plus"
+          :disabled="!store.ready||busy" @click="generalOpen=true"/>
+      </div>
+
+      <!-- Filtros de la bitácora -->
+      <div class="bitacora-filters">
+        <InputText v-model="bitacoraQuery" placeholder="Buscar en la bitácora…" class="search-input"/>
+        <div class="bit-tabs">
+          <button :class="['bit-tab', { active: bitacoraFiltro==='todas' }]"      @click="bitacoraFiltro='todas'">
+            Todas <span class="tab-count">{{ store.data.activities.length }}</span>
+          </button>
+          <button :class="['bit-tab', { active: bitacoraFiltro==='interna' }]"    @click="bitacoraFiltro='interna'">
+            <i class="pi pi-lock"/> Notas internas
+            <span class="tab-count">{{ store.data.activities.filter(a=>a.visibility==='Nota interna').length }}</span>
+          </button>
+          <button :class="['bit-tab', { active: bitacoraFiltro==='solicitante' }]" @click="bitacoraFiltro='solicitante'">
+            <i class="pi pi-eye"/> Al solicitante
+            <span class="tab-count">{{ store.data.activities.filter(a=>a.visibility==='Respuesta al solicitante').length }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Línea de tiempo estructurada -->
+      <div class="bitacora-body">
+        <template v-if="bitacoraFiltrada.length">
+          <article v-for="ev in bitacoraFiltrada" :key="ev.id"
+            :class="['bit-entry', ev.visibility==='Nota interna' ? 'bit-interno' : 'bit-respuesta']">
+
+            <div class="bit-top">
+              <!-- Tipo de evento -->
+              <div class="bit-tipo">
+                <i :class="['pi', tipoEvento(ev).icon, 'bit-icon']"/>
+                <span class="bit-label">{{ tipoEvento(ev).label }}</span>
+              </div>
+
+              <!-- Badge de visibilidad -->
+              <span v-if="ev.visibility==='Nota interna'" class="bit-badge bit-badge-interno">
+                <i class="pi pi-lock"/> Interno
+              </span>
+              <span v-else class="bit-badge bit-badge-respuesta">
+                <i class="pi pi-eye"/> Al solicitante
+              </span>
+
+              <!-- Timestamp -->
+              <small class="bit-fecha">{{ date(ev.createdAt) }}</small>
+            </div>
+
+            <!-- Texto del evento -->
+            <p class="bit-texto">{{ ev.text }}</p>
+
+            <!-- Ticket vinculado -->
+            <div v-if="ev.ticketId" class="bit-ticket">
+              <i class="pi pi-ticket"/>
+              <button class="text-link" @click="abrirDetalle(ev.ticketId!)">
+                {{ ev.ticketId.slice(0,14) }}
+                <span class="bit-ticket-title">
+                  {{ store.data.tickets.find(t=>t.id===ev.ticketId)?.title ?? '' }}
+                </span>
+              </button>
+            </div>
+            <div v-else class="bit-ticket">
+              <i class="pi pi-globe"/>
+              <span class="muted">Actividad general del equipo</span>
+            </div>
+          </article>
+        </template>
+        <p v-else class="empty">
+          {{ bitacoraQuery || bitacoraFiltro!=='todas' ? 'Ninguna entrada coincide con los filtros.' : 'Registra la primera actividad del equipo.' }}
+        </p>
+      </div>
+
+      <div class="bitacora-footer">
+        <small>{{ bitacoraFiltrada.length }} de {{ store.data.activities.length }} evento{{ store.data.activities.length !== 1 ? 's' : '' }}</small>
+      </div>
+    </section>
+  </div>
 
   <!-- Dialog: actividad general (solo para bitácora sin ticket) -->
   <Dialog v-model:visible="generalOpen" modal header="Registrar actividad general"
@@ -290,4 +383,65 @@ onMounted(() => store.load())
   th:nth-child(3), td:nth-child(3),
   th:nth-child(4), td:nth-child(4) { display: none; }
 }
+
+/* REQ-011: Bitácora general */
+.bitacora-layout { display: flex; flex-direction: column; }
+.bitacora-panel  { overflow: hidden; }
+
+.bitacora-filters {
+  padding: 14px 20px; display: flex; flex-direction: column; gap: 10px;
+  border-bottom: 1px solid #edf1f5;
+}
+.bit-tabs { display: flex; gap: 0; flex-wrap: wrap; }
+.bit-tab  {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border: 0; background: none; color: #64748b;
+  font-size: 12px; cursor: pointer; border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.bit-tab.active { color: #2563eb; border-bottom-color: #3b82f6; font-weight: 700; }
+.bit-tab:not(.active):hover { color: #334155; }
+.bit-tab i { font-size: 11px; }
+
+.bitacora-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; }
+.bitacora-footer { padding: 10px 20px; border-top: 1px solid #edf1f5; }
+.bitacora-footer small { color: #94a3b8; }
+
+.bit-entry {
+  padding: 12px 14px; border-radius: 8px;
+  border-left: 3px solid transparent;
+}
+.bit-interno  { background: #fffbeb; border-left-color: #fbbf24; }
+.bit-respuesta { background: #eff6ff; border-left-color: #93c5fd; }
+
+.bit-top  { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.bit-tipo { display: flex; align-items: center; gap: 5px; flex: 1; }
+.bit-icon { font-size: 13px; color: #3b82f6; }
+.bit-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .5px; color: #64748b;
+}
+.bit-fecha { color: #94a3b8; font-size: 11px; white-space: nowrap; margin-left: auto; }
+
+.bit-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 700; padding: 2px 7px;
+  border-radius: 10px; text-transform: uppercase; letter-spacing: .4px;
+}
+.bit-badge-interno  { background: #fef3c7; color: #92400e; }
+.bit-badge-respuesta { background: #dbeafe; color: #1d4ed8; }
+.bit-badge i { font-size: 9px; }
+
+.bit-texto  { margin: 0 0 6px; font-size: 13px; line-height: 1.55; color: #1e293b; white-space: pre-wrap; }
+
+.bit-ticket {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: #64748b;
+}
+.bit-ticket i { font-size: 11px; color: #94a3b8; }
+.bit-ticket-title {
+  max-width: 200px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; color: #64748b; margin-left: 4px;
+}
+.muted { color: #94a3b8; }
 </style>
