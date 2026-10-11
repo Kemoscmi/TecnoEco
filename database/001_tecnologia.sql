@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS tecnologia_tickets (
  SolicitanteId varchar(160) COLLATE utf8mb4_bin NOT NULL,
  ResponsableId varchar(160) COLLATE utf8mb4_bin NULL,
  Estado varchar(40) NOT NULL,
+ AbandonoRecibidaAt datetime(6) NULL,
+ EliminadoAt datetime(6) NULL,
+ EliminadoPorId varchar(160) COLLATE utf8mb4_bin NULL,
  CreatedAt datetime(6) NOT NULL
 );
 CREATE TABLE IF NOT EXISTS tecnologia_ticket_colaboradores (

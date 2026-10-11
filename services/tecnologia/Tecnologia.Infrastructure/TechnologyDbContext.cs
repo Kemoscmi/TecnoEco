@@ -8,6 +8,8 @@ public class TechnologyDbContext(DbContextOptions<TechnologyDbContext> options):
   foreach(var name in new[]{"Categoria","Estado"})t.Property<string>(name).HasMaxLength(40);
   t.Property(x=>x.SolicitanteId).HasMaxLength(160).UseCollation("utf8mb4_bin").IsRequired();
   t.Property(x=>x.ResponsableId).HasMaxLength(160).UseCollation("utf8mb4_bin");
+  t.Property(x=>x.AbandonoRecibidaAt);
+  t.Property(x=>x.EliminadoPorId).HasMaxLength(160).UseCollation("utf8mb4_bin");
   var c=model.Entity<TicketColaborador>();c.ToTable("tecnologia_ticket_colaboradores");
   c.HasKey(x=>new {x.TicketId,x.ColaboradorId});
   c.Property(x=>x.TicketId).HasMaxLength(40);

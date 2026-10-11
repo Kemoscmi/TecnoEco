@@ -1,4 +1,4 @@
-import type { Snapshot, TicketInput, Status, ActivityInput, TomarSolicitudInput, ReasignarInput, ColaboradorInput, ResolverInput, RechazarInput } from '@/types/tecnologia'
+import type { Snapshot, TicketInput, Status, ActivityInput, TomarSolicitudInput, ReasignarInput, ColaboradorInput, ResolverInput, RechazarInput, EditarSolicitudInput, EliminarSolicitudInput } from '@/types/tecnologia'
 export const demoMode = import.meta.env.VITE_DATA_MODE !== 'api'
 async function request<T>(path:string,method='GET',body?:unknown):Promise<T>{
  const res=await fetch('/api/tecnologia'+path,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)})
@@ -8,6 +8,8 @@ async function request<T>(path:string,method='GET',body?:unknown):Promise<T>{
 export const api={
  load:()=>request<Snapshot>(''),
  create:(data:TicketInput)=>request<Snapshot>('/tickets','POST',data),
+ editarSolicitud:(id:string,data:EditarSolicitudInput)=>request<Snapshot>('/tickets/'+id,'PUT',data),
+ eliminarSolicitud:(id:string,data:EliminarSolicitudInput)=>request<Snapshot>('/tickets/'+id,'DELETE',data),
  changeStatus:(id:string,status:Status)=>request<Snapshot>('/tickets/'+id+'/status','PATCH',{estado:status}),
  addActivity:(data:ActivityInput)=>request<Snapshot>('/activities','POST',data),
  // REQ-005

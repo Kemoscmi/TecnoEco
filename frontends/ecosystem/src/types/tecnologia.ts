@@ -3,7 +3,7 @@ export const categorias = ['Problema','Consulta','Solicitud de ayuda','Sugerenci
 export const statuses = ['Recibida','En proceso','Necesitamos información','Resuelta','Rechazada'] as const
 export type Status = typeof statuses[number]
 export interface TicketColaborador { ticketId:string; colaboradorId:string }
-export interface Ticket { id:string; title:string; description:string; categoria:string; solicitanteId:string; responsableId:string|null; estado:Status; createdAt:string; colaboradores:TicketColaborador[] }
+export interface Ticket { id:string; title:string; description:string; categoria:string; solicitanteId:string; responsableId:string|null; estado:Status; abandonoRecibidaAt:string|null; eliminadoAt:string|null; eliminadoPorId:string|null; createdAt:string; colaboradores:TicketColaborador[] }
 export interface Activity { id:string; ticketId:string|null; text:string; visibility:'Nota interna'|'Respuesta al solicitante'; createdAt:string }
 // REQ-010: metadatos de un archivo adjunto (sin URL hasta definir storage)
 export interface AdjuntoMeta { nombre:string; tipo:string; tamaño:number }
@@ -19,3 +19,6 @@ export interface ColaboradorInput { colaboradorId:string }
 // REQ-012
 export interface ResolverInput { mensaje:string }
 export interface RechazarInput { motivo:string }
+// REQ-013
+export interface EditarSolicitudInput { title:string; description:string; categoria:string; actorId:string }
+export interface EliminarSolicitudInput { actorId:string }

@@ -7,6 +7,9 @@ public class Ticket {
  public required string SolicitanteId { get; set; }
  public string? ResponsableId { get; set; }
  public string Estado { get; set; } = EstadosTicket.Recibida;
+ public DateTimeOffset? AbandonoRecibidaAt { get; set; }
+ public DateTimeOffset? EliminadoAt { get; set; }
+ public string? EliminadoPorId { get; set; }
  public List<TicketColaborador> Colaboradores { get; set; } = [];
  public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

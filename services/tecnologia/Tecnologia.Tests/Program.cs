@@ -246,6 +246,30 @@ var req010SinAdjTicket = req010SinAdj.Tickets.Last();
 Check(!req010SinAdj.Adjuntos.Any(a => a.TicketId == req010SinAdjTicket.Id), "REQ-010: ticket sin adjuntos en el input no genera entradas en Adjuntos");
 Console.WriteLine("Todas las comprobaciones REQ-010 correctas.");
 
+// REQ-013 — Edición y eliminación lógica
+var req013Input = new TicketInput("Solicitud editable","Descripción original.",CategoriasTicket.Consulta,"sol-013-01");
+var req013Ticket = (await service.Create(req013Input, ct)).Tickets.Last();
+var req013Editada = await service.EditarSolicitud(req013Ticket.Id, new EditarSolicitudInput("Solicitud actualizada","Descripción actualizada.",CategoriasTicket.SugerenciaMejora,"sol-013-01"), ct);
+var req013Editado = req013Editada.Tickets.Single(t => t.Id == req013Ticket.Id);
+Check(req013Editado.Title == "Solicitud actualizada" && req013Editado.Description == "Descripción actualizada." && req013Editado.Categoria == CategoriasTicket.SugerenciaMejora, "REQ-013: solicitante edita contenido mientras está Recibida");
+Check(req013Editada.Activities.Any(a => a.TicketId == req013Ticket.Id && a.Text.Contains("Solicitud editada por sol-013-01")), "REQ-013: edición conserva trazabilidad interna");
+await Reject<InvalidOperationException>(() => service.EditarSolicitud(req013Ticket.Id, new EditarSolicitudInput("No autorizado","No autorizado",CategoriasTicket.Consulta,"otro-solicitante"), ct), "REQ-013: otro solicitante no puede editar");
+await service.ChangeStatus(req013Ticket.Id, new StatusInput(EstadosTicket.EnProceso), ct);
+await Reject<InvalidOperationException>(() => service.EditarSolicitud(req013Ticket.Id, new EditarSolicitudInput("Tardía","Tardía",CategoriasTicket.Consulta,"sol-013-01"), ct), "REQ-013: no permite editar después de Recibida");
+await Reject<InvalidOperationException>(() => service.EliminarSolicitud(req013Ticket.Id, new EliminarSolicitudInput("sol-013-01"), ct), "REQ-013: no permite eliminar después de Recibida");
+var req013Retorno = (await service.Create(req013Input with { SolicitanteId = "sol-013-retorno" }, ct)).Tickets.Last();
+await service.ChangeStatus(req013Retorno.Id, new StatusInput(EstadosTicket.EnProceso), ct);
+await service.ChangeStatus(req013Retorno.Id, new StatusInput(EstadosTicket.Recibida), ct);
+await Reject<InvalidOperationException>(() => service.EditarSolicitud(req013Retorno.Id, new EditarSolicitudInput("Retorno","Retorno",CategoriasTicket.Consulta,"sol-013-retorno"), ct), "REQ-013: volver a Recibida no restablece edición");
+var req013Eliminar = (await service.Create(req013Input with { SolicitanteId = "sol-013-02" }, ct)).Tickets.Last();
+await Reject<InvalidOperationException>(() => service.EliminarSolicitud(req013Eliminar.Id, new EliminarSolicitudInput("otro-solicitante"), ct), "REQ-013: otro solicitante no puede eliminar");
+var req013Eliminada = await service.EliminarSolicitud(req013Eliminar.Id, new EliminarSolicitudInput("sol-013-02"), ct);
+Check(!req013Eliminada.Tickets.Any(t => t.Id == req013Eliminar.Id), "REQ-013: solicitud eliminada no aparece como activa");
+var req013Preservada = repo.Items.Single(t => t.Id == req013Eliminar.Id);
+Check(req013Preservada.EliminadoAt is not null && req013Preservada.EliminadoAt.Value.Offset == TimeSpan.Zero && req013Preservada.EliminadoPorId == "sol-013-02", "REQ-013: eliminación lógica conserva actor y fecha UTC");
+Check(repo.Log.Any(a => a.TicketId == req013Eliminar.Id && a.Text.Contains("eliminada lógicamente por sol-013-02")), "REQ-013: eliminación registra trazabilidad interna");
+Console.WriteLine("Todas las comprobaciones REQ-013 correctas.");
+
 static void Check(bool condition, string message) { if (!condition) throw new Exception(message); Console.WriteLine("OK: " + message); }
 static async Task Reject<T>(Func<Task<Snapshot>> action, string message) where T : Exception {
     try { await action(); } catch (T) { Console.WriteLine("OK: " + message); return; }
@@ -255,10 +279,10 @@ sealed class MemoryRepository : ITechnologyRepository {
     public List<Ticket> Items { get; } = [];
     public List<Activity> Log { get; } = [];
     public List<Adjunto> Files { get; } = [];
-    public Task<List<Ticket>> Tickets(CancellationToken ct) => Task.FromResult(Items.ToList());
+    public Task<List<Ticket>> Tickets(CancellationToken ct) => Task.FromResult(Items.Where(t => t.EliminadoAt is null).ToList());
     public Task<List<Activity>> Activities(CancellationToken ct) => Task.FromResult(Log.ToList());
     public Task<List<Adjunto>> Adjuntos(CancellationToken ct) => Task.FromResult(Files.ToList());
-    public Task<Ticket?> Find(string id, CancellationToken ct) => Task.FromResult(Items.FirstOrDefault(t => t.Id == id));
+    public Task<Ticket?> Find(string id, CancellationToken ct) => Task.FromResult(Items.FirstOrDefault(t => t.Id == id && t.EliminadoAt is null));
     public void Add(Ticket ticket) => Items.Add(ticket);
     public void Add(Activity activity) => Log.Add(activity);
     public void Add(Adjunto adjunto) => Files.Add(adjunto);
