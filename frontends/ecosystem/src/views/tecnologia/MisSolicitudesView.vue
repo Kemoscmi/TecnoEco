@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import Button from 'primevue/button'
+import Dialog from 'primevue/dialog'
+import InputText from 'primevue/inputtext'
+import Select from 'primevue/select'
 import Textarea from 'primevue/textarea'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import { useToast } from 'primevue/usetoast'
 import { useTecnologiaStore } from '@/stores/tecnologia.store'
-import type { Ticket } from '@/types/tecnologia'
+import { categorias, type Ticket } from '@/types/tecnologia'
 
 function formatSize(b: number) { return b < 1024 ? b + ' B' : b < 1048576 ? (b/1024).toFixed(1) + ' KB' : (b/1048576).toFixed(1) + ' MB' }
 
@@ -21,6 +24,11 @@ const toast = useToast()
 const selectedId = ref<string | null>(null)
 const nuevoTexto = ref('')
 const busy = ref(false)
+const editOpen = ref(false)
+const deleteOpen = ref(false)
+const editTitle = ref('')
+const editDescription = ref('')
+const editCategoria = ref('Problema')
 
 // Solo las solicitudes del usuario en sesión
 const misSolicitudes = computed(() =>
@@ -30,6 +38,7 @@ const misSolicitudes = computed(() =>
 const selected = computed<Ticket | undefined>(() =>
   store.data.tickets.find(t => t.id === selectedId.value)
 )
+const puedeEditar = computed(() => selected.value?.estado === 'Recibida' && !selected.value.abandonoRecibidaAt && selected.value.solicitanteId === MI_SOLICITANTE_ID)
 
 // REQ-003: el usuario general NO ve notas internas ni detalles técnicos.
 // Solo se entregan actividades marcadas como "Respuesta al solicitante".
@@ -65,6 +74,39 @@ function abrir(id: string) {
 function cerrar() {
   selectedId.value = null
   nuevoTexto.value = ''
+}
+
+function abrirEdicion() {
+  if (!selected.value || !puedeEditar.value) return
+  editTitle.value = selected.value.title
+  editDescription.value = selected.value.description
+  editCategoria.value = selected.value.categoria
+  editOpen.value = true
+}
+
+async function guardarEdicion() {
+  if (!selected.value || !editTitle.value.trim() || !editDescription.value.trim()) return
+  busy.value = true
+  try {
+    await store.editarSolicitud(selected.value.id, { title: editTitle.value.trim(), description: editDescription.value.trim(), categoria: editCategoria.value, actorId: MI_SOLICITANTE_ID })
+    editOpen.value = false
+    toast.add({ severity: 'success', summary: 'Solicitud actualizada', life: 3000 })
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'No se pudo editar', detail: e instanceof Error ? e.message : 'Intenta de nuevo.', life: 6000 })
+  } finally { busy.value = false }
+}
+
+async function confirmarEliminacion() {
+  if (!selected.value) return
+  busy.value = true
+  try {
+    await store.eliminarSolicitud(selected.value.id, { actorId: MI_SOLICITANTE_ID })
+    deleteOpen.value = false
+    cerrar()
+    toast.add({ severity: 'success', summary: 'Solicitud eliminada', detail: 'Ya no aparecerá entre tus solicitudes activas.', life: 3500 })
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'No se pudo eliminar', detail: e instanceof Error ? e.message : 'Intenta de nuevo.', life: 6000 })
+  } finally { busy.value = false }
 }
 
 // REQ-003: el usuario puede agregar información posterior a su solicitud.
@@ -144,6 +186,11 @@ onMounted(() => store.load())
         <h2 class="detalle-titulo">{{ selected.title }}</h2>
         <p class="detalle-desc">{{ selected.description }}</p>
         <small>Enviada el {{ date(selected.createdAt) }}</small>
+        <div v-if="puedeEditar" class="edicion-actions">
+          <Button label="Editar solicitud" icon="pi pi-pencil" outlined size="small" :disabled="busy" @click="abrirEdicion" />
+          <Button label="Eliminar" icon="pi pi-trash" severity="danger" outlined size="small" :disabled="busy" @click="deleteOpen=true" />
+        </div>
+        <small v-else class="edicion-bloqueada">El contenido original solo puede editarse o eliminarse mientras la solicitud está en Recibida.</small>
       </div>
 
       <!-- REQ-010: adjuntos públicos del ticket -->
@@ -207,6 +254,23 @@ onMounted(() => store.load())
         </form>
       </div>
     </div>
+
+    <Dialog v-model:visible="editOpen" modal header="Editar solicitud" :style="{width:'650px'}" :breakpoints="{'700px':'95vw'}">
+      <form @submit.prevent="guardarEdicion">
+        <label for="editar-titulo">Título</label>
+        <InputText id="editar-titulo" v-model="editTitle" required maxlength="140" />
+        <label for="editar-descripcion">Descripción</label>
+        <Textarea id="editar-descripcion" v-model="editDescription" required rows="5" maxlength="10000" />
+        <label for="editar-categoria">Categoría</label>
+        <Select inputId="editar-categoria" v-model="editCategoria" :options="[...categorias]" />
+        <div class="actions"><Button label="Cancelar" severity="secondary" text type="button" @click="editOpen=false"/><Button label="Guardar cambios" type="submit" :loading="busy" /></div>
+      </form>
+    </Dialog>
+
+    <Dialog v-model:visible="deleteOpen" modal header="Eliminar solicitud" :style="{width:'500px'}" :breakpoints="{'540px':'95vw'}">
+      <p>La solicitud dejará de aparecer como activa. Tecnología conservará internamente su trazabilidad.</p>
+      <div class="actions"><Button label="Cancelar" severity="secondary" text :disabled="busy" @click="deleteOpen=false"/><Button label="Eliminar solicitud" severity="danger" :loading="busy" @click="confirmarEliminacion" /></div>
+    </Dialog>
   </div>
 </template>
 
@@ -283,6 +347,8 @@ onMounted(() => store.load())
 .detalle-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .detalle-titulo { font-size: 20px; margin: 0 0 14px; }
 .detalle-desc { white-space: pre-wrap; margin: 0 0 16px; line-height: 1.7; }
+.edicion-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+.edicion-bloqueada { display: block; margin-top: 18px; color: #64748b; }
 
 .historial .empty { padding: 0 22px 22px; }
 
@@ -296,4 +362,6 @@ onMounted(() => store.load())
 .agregar-form { padding: 18px 22px 22px; }
 .agregar-form label { font-size: 13px; font-weight: 600; margin-bottom: 10px; display: block; line-height: 1.6; }
 .agregar-form .p-textarea { width: 100%; }
+form label { display: block; margin: 14px 0 6px; font-size: 12px; font-weight: 600; }
+form .p-inputtext, form .p-textarea, form .p-select { width: 100%; }
 </style>

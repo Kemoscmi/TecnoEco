@@ -16,6 +16,8 @@ static class PersistenceChecks
             var ticket = db.Model.FindEntityType(typeof(Ticket))!;
             Check(!ticket.FindProperty(nameof(Ticket.SolicitanteId))!.IsNullable, "Solicitante requerido en EF");
             Check(ticket.FindProperty(nameof(Ticket.ResponsableId))!.IsNullable, "Responsable nullable en EF");
+            Check(ticket.FindProperty(nameof(Ticket.EliminadoAt))!.IsNullable && ticket.FindProperty(nameof(Ticket.EliminadoPorId))!.IsNullable, "Eliminación lógica nullable en EF");
+            Check(ticket.FindProperty(nameof(Ticket.AbandonoRecibidaAt))!.IsNullable, "Primera salida de Recibida nullable en EF");
             Check(new[] { "Type", "Origin", "Priority", "Requester", "Assignee", "Status" }.All(p => ticket.FindProperty(p) is null), "Sin campos heredados en EF");
             var colaborador = db.Model.FindEntityType(typeof(TicketColaborador))!;
             Check(colaborador.FindPrimaryKey()!.Properties.Select(p => p.Name).SequenceEqual(new[] { "TicketId", "ColaboradorId" }), "Colaborador único por Ticket");

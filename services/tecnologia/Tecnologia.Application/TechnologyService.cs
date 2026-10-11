@@ -5,6 +5,8 @@ public record AdjuntoInput(string Nombre,string Tipo,long Tamaño);
 public record TicketInput(string Title,string Description,string Categoria,string SolicitanteId,List<AdjuntoInput>? Adjuntos=null);
 public record ActivityInput(string? TicketId,string Text,string Visibility,List<AdjuntoInput>? Adjuntos=null);
 public record StatusInput(string Estado);
+public record EditarSolicitudInput(string Title,string Description,string Categoria,string ActorId);
+public record EliminarSolicitudInput(string ActorId);
 // REQ-005: acciones de asignación. ActorId identifica al miembro de Tecnología que ejecuta la acción.
 public record TomarSolicitudInput(string ActorId);
 // REQ-012: cierre de solicitud. El mensaje/motivo se publica al solicitante.
@@ -30,10 +32,30 @@ public class TechnologyService(ITechnologyRepository repo) {
   AddAdjuntos(repo,ticket.Id,null,input.Adjuntos,"publica");
   await repo.Save(ct);return await Load(ct);
  }
+ static void ValidarEdicionInicial(Ticket ticket,string actor){
+  if(ticket.SolicitanteId!=actor)throw new InvalidOperationException("Solo el solicitante puede modificar o eliminar esta solicitud.");
+  if(ticket.Estado!=EstadosTicket.Recibida||ticket.AbandonoRecibidaAt is not null)throw new InvalidOperationException("La solicitud solo puede modificarse o eliminarse mientras está Recibida y no la haya abandonado antes.");
+ }
+ // REQ-013: el contenido original solo es editable por su solicitante mientras permanece Recibida.
+ public async Task<Snapshot> EditarSolicitud(string id,EditarSolicitudInput input,CancellationToken ct){
+  var actor=Identity(input.ActorId);var ticket=await repo.Find(id,ct)??throw new KeyNotFoundException("Ticket no encontrado.");
+  ValidarEdicionInicial(ticket,actor);
+  ticket.Title=Text(input.Title,140);ticket.Description=Text(input.Description,10000);ticket.Categoria=Choice(input.Categoria,CategoriasTicket.Iniciales.ToArray());
+  repo.Add(new Activity{TicketId=id,Text=$"Solicitud editada por {actor}.",Visibility="Nota interna"});
+  await repo.Save(ct);return await Load(ct);
+ }
+ // REQ-013: conservación lógica del Ticket y su trazabilidad; no borra registros físicos.
+ public async Task<Snapshot> EliminarSolicitud(string id,EliminarSolicitudInput input,CancellationToken ct){
+  var actor=Identity(input.ActorId);var ticket=await repo.Find(id,ct)??throw new KeyNotFoundException("Ticket no encontrado.");
+  ValidarEdicionInicial(ticket,actor);
+  ticket.EliminadoPorId=actor;ticket.EliminadoAt=DateTimeOffset.UtcNow;
+  repo.Add(new Activity{TicketId=id,Text=$"Solicitud eliminada lógicamente por {actor} el {ticket.EliminadoAt:u}.",Visibility="Nota interna"});
+  await repo.Save(ct);return await Load(ct);
+ }
  // Acción explícita de Tecnología. REQ-004 no define una matriz restrictiva de transiciones.
  public async Task<Snapshot> ChangeStatus(string id,StatusInput input,CancellationToken ct){
   var status=EstadosTicket.Validar(input.Estado);var ticket=await repo.Find(id,ct)??throw new KeyNotFoundException("Ticket no encontrado.");
-  if(ticket.Estado!=status){repo.Add(new Activity{TicketId=id,Text=$"Estado actualizado: {ticket.Estado} → {status}."});ticket.Estado=status;await repo.Save(ct);}return await Load(ct);
+  if(ticket.Estado!=status){if(ticket.Estado==EstadosTicket.Recibida&&status!=EstadosTicket.Recibida)ticket.AbandonoRecibidaAt=DateTimeOffset.UtcNow;repo.Add(new Activity{TicketId=id,Text=$"Estado actualizado: {ticket.Estado} → {status}."});ticket.Estado=status;await repo.Save(ct);}return await Load(ct);
  }
  // REQ-005 — Tomar solicitud: asigna responsable y, si estaba en Recibida, avanza a En proceso.
  // "Tomar fuera de Recibida" queda sin regla definida; esta implementación asigna igualmente sin forzar transición.

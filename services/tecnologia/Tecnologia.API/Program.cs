@@ -14,6 +14,8 @@ app.Use(async(ctx,next)=>{try{await next(ctx);}catch(ArgumentException e){ctx.Re
 app.MapGet("/health",()=>Results.Ok(new {status="ok",service="Tecnologia.API"}));
 app.MapGet("/api/tecnologia",(TechnologyService service,CancellationToken ct)=>service.Load(ct));
 app.MapPost("/api/tecnologia/tickets",(TicketInput input,TechnologyService service,CancellationToken ct)=>service.Create(input,ct));
+app.MapPut("/api/tecnologia/tickets/{id}",(string id,EditarSolicitudInput input,TechnologyService service,CancellationToken ct)=>service.EditarSolicitud(id,input,ct));
+app.MapDelete("/api/tecnologia/tickets/{id}",(string id,EliminarSolicitudInput input,TechnologyService service,CancellationToken ct)=>service.EliminarSolicitud(id,input,ct));
 app.MapPatch("/api/tecnologia/tickets/{id}/status",(string id,StatusInput input,TechnologyService service,CancellationToken ct)=>service.ChangeStatus(id,input,ct));
 // REQ-005: acciones de asignación
 app.MapPost("/api/tecnologia/tickets/{id}/tomar",(string id,TomarSolicitudInput input,TechnologyService service,CancellationToken ct)=>service.TomarSolicitud(id,input,ct));
