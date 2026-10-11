@@ -149,6 +149,41 @@ await Reject<KeyNotFoundException>(() => service.Reasignar("no-existe", new Reas
 await Reject<ArgumentException>(() => service.Reasignar(req005Ticket.Id, new ReasignarInput("actor", " "), ct), "REQ-005: Reasignar rechaza ID de responsable vacío");
 Console.WriteLine("Todas las comprobaciones REQ-005 correctas.");
 
+// REQ-012 — Resolución y rechazo
+var req012Input = new TicketInput("Solicitud a resolver","Descripción.",CategoriasTicket.Consulta,"sol-012-01");
+var req012Data = await service.Create(req012Input, ct);
+var req012Ticket = req012Data.Tickets.Last();
+// Resolver exige mensaje obligatorio
+await Reject<ArgumentException>(() => service.Resolver(req012Ticket.Id, new ResolverInput("  "), ct), "REQ-012: mensaje de resolución no puede ser vacío");
+// Resolver cambia estado y publica mensaje al solicitante
+var resolverData = await service.Resolver(req012Ticket.Id, new ResolverInput("El acceso ha sido habilitado. Ya puede ingresar con sus credenciales."), ct);
+var resolverTicket = resolverData.Tickets.First(t => t.Id == req012Ticket.Id);
+Check(resolverTicket.Estado == EstadosTicket.Resuelta, "REQ-012: Resolver cambia el estado a Resuelta");
+var resolverActs = resolverData.Activities.Where(a => a.TicketId == req012Ticket.Id).ToList();
+Check(resolverActs.Any(a => a.Visibility == "Respuesta al solicitante" && a.Text.Contains("habilitado")), "REQ-012: mensaje de resolución es visible para el solicitante");
+Check(resolverActs.Any(a => a.Visibility == "Nota interna" && a.Text.Contains("Resolución comunicada")), "REQ-012: evento interno de resolución en bitácora");
+// Resolver dos veces rechaza
+await Reject<InvalidOperationException>(() => service.Resolver(req012Ticket.Id, new ResolverInput("Segunda vez"), ct), "REQ-012: no se puede resolver una solicitud ya resuelta");
+// Rechazar exige motivo obligatorio
+var req012bInput = new TicketInput("Solicitud a rechazar","Descripción.",CategoriasTicket.SolicitudDeAyuda,"sol-012-02");
+var req012bTicket = (await service.Create(req012bInput, ct)).Tickets.Last();
+await Reject<ArgumentException>(() => service.Rechazar(req012bTicket.Id, new RechazarInput(""), ct), "REQ-012: motivo de rechazo no puede ser vacío");
+// Rechazar cambia estado y publica motivo al solicitante
+var rechazarData = await service.Rechazar(req012bTicket.Id, new RechazarInput("La solicitud queda fuera del alcance del equipo de Tecnología."), ct);
+var rechazarTicket = rechazarData.Tickets.First(t => t.Id == req012bTicket.Id);
+Check(rechazarTicket.Estado == EstadosTicket.Rechazada, "REQ-012: Rechazar cambia el estado a Rechazada");
+var rechazarActs = rechazarData.Activities.Where(a => a.TicketId == req012bTicket.Id).ToList();
+Check(rechazarActs.Any(a => a.Visibility == "Respuesta al solicitante" && a.Text.Contains("fuera del alcance")), "REQ-012: motivo de rechazo es visible para el solicitante");
+Check(rechazarActs.Any(a => a.Visibility == "Nota interna" && a.Text.Contains("comunicado")), "REQ-012: evento interno de rechazo en bitácora");
+// Rechazar dos veces rechaza
+await Reject<InvalidOperationException>(() => service.Rechazar(req012bTicket.Id, new RechazarInput("Otra vez"), ct), "REQ-012: no se puede rechazar una solicitud ya rechazada");
+// Tecnología decide explícitamente: cambiar otro estado a Resuelta usando ChangeStatus NO agrega mensaje al solicitante
+var req012cTicket = (await service.Create(req012Input with { SolicitanteId = "sol-012-03" }, ct)).Tickets.Last();
+var sinMensajeData = await service.ChangeStatus(req012cTicket.Id, new StatusInput(EstadosTicket.Resuelta), ct);
+var sinMensajeVis = sinMensajeData.Activities.Where(a => a.TicketId == req012cTicket.Id && a.Visibility == "Respuesta al solicitante").ToList();
+Check(sinMensajeVis.Count == 0, "REQ-012: ChangeStatus a Resuelta sin Resolver() no genera mensaje al solicitante (flujo diferenciado)");
+Console.WriteLine("Todas las comprobaciones REQ-012 correctas.");
+
 // REQ-011 — Bitácora y trazabilidad
 // Verifica que cada acción genera el evento correspondiente en la bitácora
 var req011Input = new TicketInput("Ticket bitácora","Verificar eventos de trazabilidad.",CategoriasTicket.Problema,"sol-bita-01");

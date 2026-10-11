@@ -16,3 +16,6 @@ export interface ActivityInput { ticketId:string|null; text:string; visibility:A
 export interface TomarSolicitudInput { actorId:string }
 export interface ReasignarInput { actorId:string; nuevoResponsableId:string }
 export interface ColaboradorInput { colaboradorId:string }
+// REQ-012
+export interface ResolverInput { mensaje:string }
+export interface RechazarInput { motivo:string }

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api,demoMode } from '@/services/tecnologia.api'
-import type { Snapshot,TicketInput,Status,ActivityInput,Activity,TomarSolicitudInput,ReasignarInput,ColaboradorInput,Adjunto,AdjuntoMeta } from '@/types/tecnologia'
+import type { Snapshot,TicketInput,Status,ActivityInput,Activity,TomarSolicitudInput,ReasignarInput,ColaboradorInput,Adjunto,AdjuntoMeta,ResolverInput,RechazarInput } from '@/types/tecnologia'
 const key='tecnologia-ecosystem.demo.req001.v2'
 function seed():Snapshot {const now=new Date().toISOString();return {tickets:[
 {id:'TEC-DEMO01',title:'Error al guardar una solicitud',description:'Al confirmar la solicitud aparece un error. Revisar el flujo de guardado.',categoria:'Problema',estado:'Recibida',solicitanteId:'demo-cliente-01',responsableId:null,colaboradores:[],createdAt:now},
@@ -42,5 +42,26 @@ export const useTecnologiaStore=defineStore('tecnologia',()=>{
    d.activities.unshift(activity({ticketId:id,text:`Colaborador agregado: ${input.colaboradorId}.`,visibility:'Nota interna'}));
   },()=>api.agregarColaborador(id,input))
  }
- return {data,loading,ready,error,load,create,changeStatus,addActivity,tomarSolicitud,reasignar,agregarColaborador}
+ // REQ-012
+ async function resolver(id:string,input:ResolverInput){
+  await mutate(d=>{
+   const t=d.tickets.find(t=>t.id===id);if(!t)throw new Error('Ticket no encontrado');
+   if(t.estado==='Resuelta')throw new Error('La solicitud ya está resuelta.');
+   if(!input.mensaje.trim())throw new Error('El mensaje de resolución es obligatorio.');
+   t.estado='Resuelta';
+   d.activities.unshift(activity({ticketId:id,text:input.mensaje.trim(),visibility:'Respuesta al solicitante'}));
+   d.activities.unshift(activity({ticketId:id,text:'Estado actualizado: Resuelta. Resolución comunicada al solicitante.',visibility:'Nota interna'}));
+  },()=>api.resolver(id,input))
+ }
+ async function rechazar(id:string,input:RechazarInput){
+  await mutate(d=>{
+   const t=d.tickets.find(t=>t.id===id);if(!t)throw new Error('Ticket no encontrado');
+   if(t.estado==='Rechazada')throw new Error('La solicitud ya está rechazada.');
+   if(!input.motivo.trim())throw new Error('El motivo de rechazo es obligatorio.');
+   t.estado='Rechazada';
+   d.activities.unshift(activity({ticketId:id,text:input.motivo.trim(),visibility:'Respuesta al solicitante'}));
+   d.activities.unshift(activity({ticketId:id,text:'Estado actualizado: Rechazada. Motivo comunicado al solicitante.',visibility:'Nota interna'}));
+  },()=>api.rechazar(id,input))
+ }
+ return {data,loading,ready,error,load,create,changeStatus,addActivity,tomarSolicitud,reasignar,agregarColaborador,resolver,rechazar}
 })

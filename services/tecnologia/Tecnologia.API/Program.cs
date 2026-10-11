@@ -20,4 +20,7 @@ app.MapPost("/api/tecnologia/tickets/{id}/tomar",(string id,TomarSolicitudInput 
 app.MapPatch("/api/tecnologia/tickets/{id}/responsable",(string id,ReasignarInput input,TechnologyService service,CancellationToken ct)=>service.Reasignar(id,input,ct));
 app.MapPost("/api/tecnologia/tickets/{id}/colaboradores",(string id,ColaboradorInput input,TechnologyService service,CancellationToken ct)=>service.AgregarColaborador(id,input,ct));
 app.MapPost("/api/tecnologia/activities",(ActivityInput input,TechnologyService service,CancellationToken ct)=>service.AddActivity(input,ct));
+// REQ-012: resolución y rechazo — ambos requieren mensaje obligatorio visible para el solicitante
+app.MapPost("/api/tecnologia/tickets/{id}/resolver",(string id,ResolverInput input,TechnologyService service,CancellationToken ct)=>service.Resolver(id,input,ct));
+app.MapPost("/api/tecnologia/tickets/{id}/rechazar",(string id,RechazarInput input,TechnologyService service,CancellationToken ct)=>service.Rechazar(id,input,ct));
 app.Run();

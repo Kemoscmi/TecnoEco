@@ -7,6 +7,9 @@ public record ActivityInput(string? TicketId,string Text,string Visibility,List<
 public record StatusInput(string Estado);
 // REQ-005: acciones de asignación. ActorId identifica al miembro de Tecnología que ejecuta la acción.
 public record TomarSolicitudInput(string ActorId);
+// REQ-012: cierre de solicitud. El mensaje/motivo se publica al solicitante.
+public record ResolverInput(string Mensaje);
+public record RechazarInput(string Motivo);
 public record ReasignarInput(string ActorId,string NuevoResponsableId);
 public record ColaboradorInput(string ColaboradorId);
 public record Snapshot(List<Ticket> Tickets,List<Activity> Activities,List<Adjunto> Adjuntos);
@@ -58,6 +61,26 @@ public class TechnologyService(ITechnologyRepository repo) {
   if(ticket.Colaboradores.Any(c=>c.ColaboradorId==colaboradorId))throw new InvalidOperationException("El colaborador ya está asociado a esta solicitud.");
   ticket.Colaboradores.Add(new TicketColaborador{TicketId=id,ColaboradorId=colaboradorId});
   repo.Add(new Activity{TicketId=id,Text=$"Colaborador agregado: {colaboradorId}."});
+  await repo.Save(ct);return await Load(ct);
+ }
+ // REQ-012 — Resolución: requiere mensaje obligatorio visible para el solicitante.
+ public async Task<Snapshot> Resolver(string id,ResolverInput input,CancellationToken ct){
+  var mensaje=Text(input.Mensaje,10000);
+  var ticket=await repo.Find(id,ct)??throw new KeyNotFoundException("Ticket no encontrado.");
+  if(ticket.Estado==EstadosTicket.Resuelta)throw new InvalidOperationException("La solicitud ya está resuelta.");
+  ticket.Estado=EstadosTicket.Resuelta;
+  repo.Add(new Activity{TicketId=id,Text=mensaje,Visibility="Respuesta al solicitante"});
+  repo.Add(new Activity{TicketId=id,Text="Estado actualizado: "+EstadosTicket.Resuelta+". Resolución comunicada al solicitante.",Visibility="Nota interna"});
+  await repo.Save(ct);return await Load(ct);
+ }
+ // REQ-012 — Rechazo: requiere motivo obligatorio visible para el solicitante.
+ public async Task<Snapshot> Rechazar(string id,RechazarInput input,CancellationToken ct){
+  var motivo=Text(input.Motivo,10000);
+  var ticket=await repo.Find(id,ct)??throw new KeyNotFoundException("Ticket no encontrado.");
+  if(ticket.Estado==EstadosTicket.Rechazada)throw new InvalidOperationException("La solicitud ya está rechazada.");
+  ticket.Estado=EstadosTicket.Rechazada;
+  repo.Add(new Activity{TicketId=id,Text=motivo,Visibility="Respuesta al solicitante"});
+  repo.Add(new Activity{TicketId=id,Text="Estado actualizado: "+EstadosTicket.Rechazada+". Motivo comunicado al solicitante.",Visibility="Nota interna"});
   await repo.Save(ct);return await Load(ct);
  }
  public async Task<Snapshot> AddActivity(ActivityInput input,CancellationToken ct){
