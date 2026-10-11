@@ -1,22 +1,31 @@
 using Tecnologia.Domain;
 namespace Tecnologia.Application;
-public record TicketInput(string Title,string Description,string Categoria,string SolicitanteId);
-public record ActivityInput(string? TicketId,string Text,string Visibility);
+// REQ-010: metadatos de un adjunto recibido en el cuerpo de la petición
+public record AdjuntoInput(string Nombre,string Tipo,long Tamaño);
+public record TicketInput(string Title,string Description,string Categoria,string SolicitanteId,List<AdjuntoInput>? Adjuntos=null);
+public record ActivityInput(string? TicketId,string Text,string Visibility,List<AdjuntoInput>? Adjuntos=null);
 public record StatusInput(string Estado);
 // REQ-005: acciones de asignación. ActorId identifica al miembro de Tecnología que ejecuta la acción.
 public record TomarSolicitudInput(string ActorId);
 public record ReasignarInput(string ActorId,string NuevoResponsableId);
 public record ColaboradorInput(string ColaboradorId);
-public record Snapshot(List<Ticket> Tickets,List<Activity> Activities);
+public record Snapshot(List<Ticket> Tickets,List<Activity> Activities,List<Adjunto> Adjuntos);
 public class TechnologyService(ITechnologyRepository repo) {
  // Los identificadores son opacos: no normalizar mayúsculas, espacios ni contenido.
  static string Identity(string? value){if(string.IsNullOrWhiteSpace(value)||value.Length>160)throw new ArgumentException("Identificador requerido (máximo 160 caracteres).");return value;}
  static string Text(string? value,int max){if(string.IsNullOrWhiteSpace(value)||value.Trim().Length>max)throw new ArgumentException($"Texto requerido (máximo {max} caracteres).");return value.Trim();}
  static string Choice(string? value,params string[] allowed){if(value is null||!allowed.Contains(value))throw new ArgumentException("Opción no válida.");return value;}
- public async Task<Snapshot> Load(CancellationToken ct)=>new(await repo.Tickets(ct),await repo.Activities(ct));
+ public async Task<Snapshot> Load(CancellationToken ct)=>new(await repo.Tickets(ct),await repo.Activities(ct),await repo.Adjuntos(ct));
+ // REQ-010: valida y normaliza el nombre de archivo
+ static string FileName(string? value){if(string.IsNullOrWhiteSpace(value)||value.Trim().Length>260)throw new ArgumentException("Nombre de archivo requerido (máximo 260 caracteres).");return value.Trim();}
+ static void AddAdjuntos(ITechnologyRepository repo,string ticketId,string? activityId,IEnumerable<AdjuntoInput>? adjuntos,string visibility){
+  foreach(var a in adjuntos??[])repo.Add(new Adjunto{TicketId=ticketId,ActivityId=activityId,Nombre=FileName(a.Nombre),Tipo=string.IsNullOrWhiteSpace(a.Tipo)?"application/octet-stream":a.Tipo.Trim(),Tamaño=a.Tamaño,Visibility=visibility,Url=null});
+ }
  public async Task<Snapshot> Create(TicketInput input,CancellationToken ct){
   var ticket=new Ticket {Title=Text(input.Title,140),Description=Text(input.Description,10000),Categoria=Choice(input.Categoria,CategoriasTicket.Iniciales.ToArray()),SolicitanteId=Identity(input.SolicitanteId),ResponsableId=null,Estado=EstadosTicket.Recibida};
-  repo.Add(ticket);repo.Add(new Activity{TicketId=ticket.Id,Text="Ticket creado. Pendiente de revisión."});await repo.Save(ct);return await Load(ct);
+  repo.Add(ticket);repo.Add(new Activity{TicketId=ticket.Id,Text="Ticket creado. Pendiente de revisión."});
+  AddAdjuntos(repo,ticket.Id,null,input.Adjuntos,"publica");
+  await repo.Save(ct);return await Load(ct);
  }
  // Acción explícita de Tecnología. REQ-004 no define una matriz restrictiva de transiciones.
  public async Task<Snapshot> ChangeStatus(string id,StatusInput input,CancellationToken ct){
@@ -55,6 +64,10 @@ public class TechnologyService(ITechnologyRepository repo) {
   var text=Text(input.Text,10000);var visibility=Choice(input.Visibility,"Nota interna","Respuesta al solicitante");
   if(input.TicketId is not null && await repo.Find(input.TicketId,ct) is null)throw new KeyNotFoundException("Ticket no encontrado.");
   if(input.TicketId is null && visibility!="Nota interna")throw new ArgumentException("Las actividades generales son internas.");
-  repo.Add(new Activity{TicketId=input.TicketId,Text=text,Visibility=visibility});await repo.Save(ct);return await Load(ct);
+  var activity=new Activity{TicketId=input.TicketId,Text=text,Visibility=visibility};
+  repo.Add(activity);
+  // REQ-010: adjuntos heredan la visibilidad de la actividad (publica | interna)
+  if(input.TicketId is not null){var adjVis=visibility=="Respuesta al solicitante"?"publica":"interna";AddAdjuntos(repo,input.TicketId,activity.Id,input.Adjuntos,adjVis);}
+  await repo.Save(ct);return await Load(ct);
  }
 }

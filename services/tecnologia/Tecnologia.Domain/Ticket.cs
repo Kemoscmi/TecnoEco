@@ -17,3 +17,17 @@ public class Activity {
  public string Visibility { get; set; } = "Nota interna";
  public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
+// REQ-010: metadatos de un archivo adjunto.
+// Url es null hasta que se configure el proveedor de storage.
+// Visibility se hereda del elemento padre (ticket original = "publica"; actividad = según su Visibility).
+public class Adjunto {
+ public string Id { get; set; } = Guid.NewGuid().ToString("N");
+ public string TicketId { get; set; } = "";
+ public string? ActivityId { get; set; }
+ public string Nombre { get; set; } = "";
+ public string Tipo { get; set; } = "";
+ public long Tamaño { get; set; }
+ public string Visibility { get; set; } = "publica"; // publica | interna
+ public string? Url { get; set; }
+ public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}

@@ -9,7 +9,7 @@ import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import { useToast } from 'primevue/usetoast'
 import { useTecnologiaStore } from '@/stores/tecnologia.store'
-import { statuses, type Activity, type Status } from '@/types/tecnologia'
+import { statuses, type Activity, type Status, type Adjunto } from '@/types/tecnologia'
 
 // Demo: en producción vendrá del perfil autenticado (REQ-005)
 const ACTOR_ID = 'tecnologia-demo'
@@ -36,6 +36,25 @@ const conversacion = computed(() => actividades.value.filter(a => a.visibility =
 
 // Línea de tiempo = todo, en orden cronológico
 const lineaDeTiempo = computed(() => actividades.value)
+
+// ── Adjuntos (REQ-010) ─────────────────────────────────────────────────
+const adjuntosTicket = computed<Adjunto[]>(() =>
+  store.data.adjuntos.filter(a => a.ticketId === ticket.value?.id && a.activityId === null)
+)
+const adjuntosDeActividad = (actId: string) =>
+  store.data.adjuntos.filter(a => a.activityId === actId)
+
+const fileInput  = ref<HTMLInputElement | null>(null)
+const archivos   = ref<File[]>([])
+function onFileChange(e: Event) {
+  const el = e.target as HTMLInputElement
+  if (!el.files) return
+  const nuevos = Array.from(el.files).filter(f => !archivos.value.some(a => a.name === f.name && a.size === f.size))
+  archivos.value = [...archivos.value, ...nuevos]
+  el.value = ''
+}
+function quitarArchivo(i: number) { archivos.value = archivos.value.filter((_, j) => j !== i) }
+function formatSize(b: number) { return b < 1024 ? b + ' B' : b < 1048576 ? (b/1024).toFixed(1) + ' KB' : (b/1048576).toFixed(1) + ' MB' }
 
 // ── Formularios ────────────────────────────────────────────────────────
 const note       = ref('')
@@ -74,8 +93,12 @@ function changeStatus(value: Status) {
 async function guardarActividad() {
   if (!note.value.trim()) return
   await run(async () => {
-    await store.addActivity({ ticketId: ticket.value!.id, text: note.value.trim(), visibility: visibility.value })
+    await store.addActivity({
+      ticketId: ticket.value!.id, text: note.value.trim(), visibility: visibility.value,
+      adjuntos: archivos.value.map(f => ({ nombre: f.name, tipo: f.type || 'application/octet-stream', tamaño: f.size })),
+    })
     note.value = ''
+    archivos.value = []
   })
 }
 
@@ -148,15 +171,24 @@ onMounted(() => store.load())
             </div>
           </section>
 
-          <!-- Adjuntos (REQ-010 pendiente) -->
+          <!-- REQ-010: Adjuntos de la solicitud original -->
           <section class="panel detalle-card">
             <div class="card-header">
-              <i class="pi pi-paperclip"/> <h2>Adjuntos</h2>
+              <i class="pi pi-paperclip"/> <h2>Adjuntos de la solicitud</h2>
+              <small class="badge-publica">Visibles para el solicitante</small>
             </div>
-            <div class="card-body adjuntos-placeholder">
-              <i class="pi pi-cloud-upload adjuntos-icon"/>
-              <p>Los archivos adjuntos estarán disponibles próximamente.</p>
-              <small>Próximamente · <abbr title="REQ-010 — Archivos adjuntos">REQ-010</abbr></small>
+            <div class="card-body">
+              <div v-if="adjuntosTicket.length" class="adj-lista">
+                <div v-for="adj in adjuntosTicket" :key="adj.id" class="adj-chip">
+                  <i class="pi pi-file adj-icon"/>
+                  <span class="adj-nombre">{{ adj.nombre }}</span>
+                  <small class="adj-size">{{ formatSize(adj.tamaño) }}</small>
+                  <span class="adj-storage-badge" title="URL pendiente de storage">
+                    <i class="pi pi-clock"/> Sin storage
+                  </span>
+                </div>
+              </div>
+              <p v-else class="empty">No se adjuntaron archivos a esta solicitud.</p>
             </div>
           </section>
 
@@ -198,6 +230,22 @@ onMounted(() => store.load())
                   :placeholder="visibility === 'Nota interna'
                     ? 'Avance interno, diagnóstico, observación del equipo…'
                     : 'Respuesta o información que el solicitante necesita saber…'"/>
+
+                <!-- REQ-010: adjuntos al comentario/nota -->
+                <div class="adj-form-row">
+                  <button type="button" class="adj-pick-btn" @click="fileInput?.click()">
+                    <i class="pi pi-paperclip"/> Adjuntar archivos
+                  </button>
+                  <input ref="fileInput" type="file" multiple class="file-hidden" @change="onFileChange"/>
+                  <div v-if="archivos.length" class="adj-chips-form">
+                    <span v-for="(f, i) in archivos" :key="i" class="adj-chip-form">
+                      <i class="pi pi-file"/>{{ f.name }}
+                      <small>{{ formatSize(f.size) }}</small>
+                      <button type="button" class="quitar-btn" @click="quitarArchivo(i)"><i class="pi pi-times"/></button>
+                    </span>
+                  </div>
+                </div>
+
                 <div class="conv-form-footer">
                   <Button type="submit"
                     :label="visibility === 'Nota interna' ? 'Guardar nota' : 'Enviar respuesta'"
@@ -253,6 +301,13 @@ onMounted(() => store.load())
                     <small>{{ date(ev.createdAt) }}</small>
                   </div>
                   <p>{{ ev.text }}</p>
+                  <!-- REQ-010: adjuntos de esta actividad -->
+                  <div v-if="adjuntosDeActividad(ev.id).length" class="tl-adjuntos">
+                    <span v-for="adj in adjuntosDeActividad(ev.id)" :key="adj.id" class="tl-adj-chip">
+                      <i class="pi pi-paperclip"/> {{ adj.nombre }}
+                      <small>{{ formatSize(adj.tamaño) }}</small>
+                    </span>
+                  </div>
                 </article>
               </div>
               <p v-else class="empty">No hay eventos registrados aún.</p>
@@ -443,6 +498,56 @@ onMounted(() => store.load())
 .tl-icon { font-size: 13px; color: #3b82f6; }
 .tl-tipo { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #64748b; flex: 1; }
 .tl-top small { color: #94a3b8; }
+
+/* REQ-010: Adjuntos */
+.badge-publica {
+  font-size: 11px; padding: 2px 8px; border-radius: 10px;
+  background: #dcfce7; color: #166534; font-weight: 600;
+}
+.adj-lista { display: flex; flex-direction: column; gap: 6px; }
+.adj-chip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0;
+  border-radius: 6px; font-size: 12px;
+}
+.adj-icon { color: #3b82f6; font-size: 14px; }
+.adj-nombre { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adj-size { color: #94a3b8; white-space: nowrap; }
+.adj-storage-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; color: #f59e0b; background: #fffbeb;
+  border: 1px solid #fde68a; border-radius: 8px; padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.adj-form-row { display: flex; flex-direction: column; gap: 6px; margin: 4px 0; }
+.adj-pick-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px dashed #93c5fd; background: #f0f9ff; color: #3b82f6;
+  font-size: 12px; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  align-self: flex-start;
+}
+.adj-pick-btn:hover { background: #dbeafe; }
+.file-hidden { display: none; }
+.adj-chips-form { display: flex; flex-wrap: wrap; gap: 5px; }
+.adj-chip-form {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; padding: 4px 8px; background: #f1f5f9;
+  border: 1px solid #e2e8f0; border-radius: 10px; color: #334155;
+}
+.adj-chip-form i { color: #3b82f6; }
+.adj-chip-form small { color: #94a3b8; }
+.quitar-btn { border: 0; background: none; color: #94a3b8; cursor: pointer; padding: 1px; line-height: 1; }
+.quitar-btn:hover { color: #ef4444; }
+
+.tl-adjuntos { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.tl-adj-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; padding: 3px 8px; background: #f8fafc;
+  border: 1px solid #e2e8f0; border-radius: 8px; color: #334155;
+}
+.tl-adj-chip i { color: #64748b; font-size: 10px; }
+.tl-adj-chip small { color: #94a3b8; }
 
 /* REQ-009: Badges de visibilidad en la timeline */
 .tl-badge {
