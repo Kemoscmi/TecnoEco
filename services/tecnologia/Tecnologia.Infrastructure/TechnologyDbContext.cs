@@ -15,6 +15,10 @@ public class TechnologyDbContext(DbContextOptions<TechnologyDbContext> options):
   c.Property(x=>x.TicketId).HasMaxLength(40);
   c.Property(x=>x.ColaboradorId).HasMaxLength(160).UseCollation("utf8mb4_bin");
   c.HasOne<Ticket>().WithMany(x=>x.Colaboradores).HasForeignKey(x=>x.TicketId).OnDelete(DeleteBehavior.Restrict);
+  var tt=model.Entity<TrabajoTecnicoRelacionado>();tt.ToTable("tecnologia_ticket_trabajos_tecnicos");
+  tt.HasKey(x=>new {x.TicketId,x.TrabajoTecnicoId});
+  tt.Property(x=>x.TicketId).HasMaxLength(40);tt.Property(x=>x.TrabajoTecnicoId).HasMaxLength(160).UseCollation("utf8mb4_bin");tt.Property(x=>x.TipoTrabajoTecnico).HasMaxLength(40);tt.Property(x=>x.RelacionadoPorId).HasMaxLength(160).UseCollation("utf8mb4_bin");
+  tt.HasOne<Ticket>().WithMany(x=>x.TrabajosTecnicos).HasForeignKey(x=>x.TicketId).OnDelete(DeleteBehavior.Restrict);
   var a=model.Entity<Activity>();a.ToTable("tecnologia_actividades");a.HasKey(x=>x.Id);a.Property(x=>x.Id).HasMaxLength(40);a.Property(x=>x.TicketId).HasMaxLength(40);a.Property(x=>x.Text).HasColumnType("text");a.Property(x=>x.Visibility).HasMaxLength(40);a.HasOne<Ticket>().WithMany().HasForeignKey(x=>x.TicketId).OnDelete(DeleteBehavior.Restrict);
   // REQ-010: tabla de adjuntos (metadata únicamente; Url null hasta configurar storage)
   var adj=model.Entity<Adjunto>();adj.ToTable("tecnologia_adjuntos");adj.HasKey(x=>x.Id);adj.Property(x=>x.Id).HasMaxLength(40);adj.Property(x=>x.TicketId).HasMaxLength(40).IsRequired();adj.Property(x=>x.ActivityId).HasMaxLength(40);adj.Property(x=>x.Nombre).HasMaxLength(260).IsRequired();adj.Property(x=>x.Tipo).HasMaxLength(120);adj.Property(x=>x.Visibility).HasMaxLength(20);adj.Property(x=>x.Url).HasMaxLength(2000);adj.HasOne<Ticket>().WithMany().HasForeignKey(x=>x.TicketId).OnDelete(DeleteBehavior.Restrict);

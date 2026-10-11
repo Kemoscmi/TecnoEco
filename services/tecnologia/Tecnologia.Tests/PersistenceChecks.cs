@@ -22,6 +22,9 @@ static class PersistenceChecks
             var colaborador = db.Model.FindEntityType(typeof(TicketColaborador))!;
             Check(colaborador.FindPrimaryKey()!.Properties.Select(p => p.Name).SequenceEqual(new[] { "TicketId", "ColaboradorId" }), "Colaborador único por Ticket");
             Check(colaborador.GetForeignKeys().Single().PrincipalEntityType == ticket, "Relación de colaboradores con Ticket");
+            var trabajoTecnico = db.Model.FindEntityType(typeof(TrabajoTecnicoRelacionado))!;
+            Check(trabajoTecnico.FindPrimaryKey()!.Properties.Select(p => p.Name).SequenceEqual(new[] { "TicketId", "TrabajoTecnicoId" }), "Relación técnica única por Ticket");
+            Check(trabajoTecnico.GetForeignKeys().Single().PrincipalEntityType == ticket, "Relación de trabajo técnico con Ticket");
             Check(db.Model.FindEntityType(typeof(EventoTicket)) is null, "Contrato de auditoría sin persistencia");
         }
         if (string.IsNullOrWhiteSpace(server))

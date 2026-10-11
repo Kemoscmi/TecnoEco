@@ -9,7 +9,7 @@ import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import { useToast } from 'primevue/usetoast'
 import { useTecnologiaStore } from '@/stores/tecnologia.store'
-import { statuses, type Activity, type Status, type Adjunto } from '@/types/tecnologia'
+import { statuses, tiposTrabajoTecnico, type Activity, type Status, type Adjunto, type TipoTrabajoTecnico } from '@/types/tecnologia'
 
 // Demo: en producción vendrá del perfil autenticado (REQ-005)
 const ACTOR_ID = 'tecnologia-demo'
@@ -92,6 +92,8 @@ const note       = ref('')
 const visibility = ref<Activity['visibility']>('Nota interna')
 const reasignarId       = ref('')
 const nuevoColaborador  = ref('')
+const trabajoTecnicoId = ref('')
+const tipoTrabajoTecnico = ref<TipoTrabajoTecnico>('Tarea técnica')
 
 const severity = (s: string) =>
   s === 'Resuelta' ? 'success' : s === 'Rechazada' ? 'danger'
@@ -105,6 +107,7 @@ const tipoEvento = (a: Activity) => {
   if (a.text.includes('Reasignada'))         return { icon: 'pi-arrow-right-arrow-left', label: 'Reasignación' }
   if (a.text.includes('Estado actualizado')) return { icon: 'pi-refresh', label: 'Cambio de estado' }
   if (a.text.includes('Colaborador'))        return { icon: 'pi-users', label: 'Colaborador' }
+  if (a.text.includes('Trabajo técnico'))    return { icon: 'pi-wrench', label: 'Trabajo técnico' }
   if (a.visibility === 'Respuesta al solicitante') return { icon: 'pi-comment', label: 'Respuesta al solicitante' }
   return { icon: 'pi-info-circle', label: 'Nota interna' }
 }
@@ -150,6 +153,14 @@ async function agregarColaborador() {
   await run(async () => {
     await store.agregarColaborador(ticket.value!.id, { colaboradorId: nuevoColaborador.value.trim() })
     nuevoColaborador.value = ''
+  })
+}
+
+async function relacionarTrabajoTecnico() {
+  if (!trabajoTecnicoId.value.trim()) return
+  await run(async () => {
+    await store.relacionarTrabajoTecnico(ticket.value!.id, { trabajoTecnicoId: trabajoTecnicoId.value.trim(), tipoTrabajoTecnico: tipoTrabajoTecnico.value, actorId: ACTOR_ID })
+    trabajoTecnicoId.value = ''
   })
 }
 
@@ -438,13 +449,22 @@ onMounted(() => store.load())
             </dl>
           </div>
 
-          <!-- Trabajo técnico relacionado (REQ-014 pendiente) -->
-          <div class="panel sidebar-card placeholder-card">
+          <!-- REQ-014: referencias técnicas sin implementar sus módulos -->
+          <div class="panel sidebar-card">
             <div class="sidebar-card-label"><i class="pi pi-wrench"/> Trabajo técnico</div>
-            <p class="muted" style="font-size:12px;margin:0">
-              Sin trabajo técnico vinculado.<br>
-              <small>Próximamente · <abbr title="REQ-014 — Relación Solicitud ↔ Trabajo técnico">REQ-014</abbr></small>
-            </p>
+            <div v-if="ticket.trabajosTecnicos.length" class="trabajo-list">
+              <div v-for="trabajo in ticket.trabajosTecnicos" :key="trabajo.trabajoTecnicoId" class="trabajo-item">
+                <Tag :value="trabajo.tipoTrabajoTecnico" severity="secondary"/>
+                <code>{{ trabajo.trabajoTecnicoId }}</code>
+                <small>Relacionado por {{ trabajo.relacionadoPorId }}</small>
+              </div>
+            </div>
+            <p v-else class="muted" style="font-size:12px;margin:0">Sin trabajo técnico relacionado.</p>
+            <div class="trabajo-form">
+              <InputText v-model="trabajoTecnicoId" placeholder="ID de trabajo técnico" maxlength="160" size="small"/>
+              <Select v-model="tipoTrabajoTecnico" :options="[...tiposTrabajoTecnico]" size="small"/>
+              <Button label="Relacionar" size="small" text :loading="busy" :disabled="!trabajoTecnicoId.trim()" @click="relacionarTrabajoTecnico"/>
+            </div>
           </div>
 
         </aside>
@@ -637,6 +657,12 @@ onMounted(() => store.load())
 .colab-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .colab-chip { background: #dbeafe; color: #1d4ed8; font-size: 11px; padding: 3px 9px; border-radius: 12px; font-weight: 500; }
 .colab-form { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.trabajo-list { display: flex; flex-direction: column; gap: 7px; }
+.trabajo-item { display: flex; flex-direction: column; gap: 4px; padding: 8px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11px; }
+.trabajo-item code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trabajo-form { display: flex; gap: 6px; flex-wrap: wrap; }
+.trabajo-form .p-inputtext, .trabajo-form .p-select { width: 100%; }
 
 .meta-dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12px; }
 .meta-dl dt { color: #64748b; font-weight: 600; }

@@ -7,6 +7,7 @@ public record ActivityInput(string? TicketId,string Text,string Visibility,List<
 public record StatusInput(string Estado);
 public record EditarSolicitudInput(string Title,string Description,string Categoria,string ActorId);
 public record EliminarSolicitudInput(string ActorId);
+public record RelacionarTrabajoTecnicoInput(string TrabajoTecnicoId,string TipoTrabajoTecnico,string ActorId);
 // REQ-005: acciones de asignación. ActorId identifica al miembro de Tecnología que ejecuta la acción.
 public record TomarSolicitudInput(string ActorId);
 // REQ-012: cierre de solicitud. El mensaje/motivo se publica al solicitante.
@@ -50,6 +51,16 @@ public class TechnologyService(ITechnologyRepository repo) {
   ValidarEdicionInicial(ticket,actor);
   ticket.EliminadoPorId=actor;ticket.EliminadoAt=DateTimeOffset.UtcNow;
   repo.Add(new Activity{TicketId=id,Text=$"Solicitud eliminada lógicamente por {actor} el {ticket.EliminadoAt:u}.",Visibility="Nota interna"});
+  await repo.Save(ct);return await Load(ct);
+ }
+ // REQ-014: crea solo la referencia y su actividad; no crea trabajo técnico ni modifica el estado.
+ public async Task<Snapshot> RelacionarTrabajoTecnico(string id,RelacionarTrabajoTecnicoInput input,CancellationToken ct){
+  var trabajoId=Identity(input.TrabajoTecnicoId);var tipo=TiposTrabajoTecnico.Validar(input.TipoTrabajoTecnico);var actor=Identity(input.ActorId);
+  var ticket=await repo.Find(id,ct)??throw new KeyNotFoundException("Ticket no encontrado.");
+  if(ticket.TrabajosTecnicos.Any(t=>t.TrabajoTecnicoId==trabajoId))throw new InvalidOperationException("El trabajo técnico ya está relacionado con esta solicitud.");
+  var relacion=new TrabajoTecnicoRelacionado{TicketId=id,TrabajoTecnicoId=trabajoId,TipoTrabajoTecnico=tipo,RelacionadoPorId=actor};
+  ticket.TrabajosTecnicos.Add(relacion);repo.Add(relacion);
+  repo.Add(new Activity{TicketId=id,Text=$"Trabajo técnico relacionado: {tipo} {trabajoId}, por {actor}.",Visibility="Nota interna"});
   await repo.Save(ct);return await Load(ct);
  }
  // Acción explícita de Tecnología. REQ-004 no define una matriz restrictiva de transiciones.
