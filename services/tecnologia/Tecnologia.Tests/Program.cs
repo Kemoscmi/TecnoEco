@@ -3,7 +3,7 @@ using Tecnologia.Domain;
 using System.Text.Json;
 
 var repo = new MemoryRepository();
-var service = new TechnologyService(repo);
+var service = new TechnologyService(repo, new NullNotificationPusher());
 var ct = CancellationToken.None;
 var input = new TicketInput(" Error de guardado ", "Pasos para reproducir", CategoriasTicket.Problema, "Cliente-01");
 var data = await service.Create(input, ct);
