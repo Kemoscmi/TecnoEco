@@ -56,6 +56,37 @@ function onFileChange(e: Event) {
 function quitarArchivo(i: number) { archivos.value = archivos.value.filter((_, j) => j !== i) }
 function formatSize(b: number) { return b < 1024 ? b + ' B' : b < 1048576 ? (b/1024).toFixed(1) + ' KB' : (b/1048576).toFixed(1) + ' MB' }
 
+// REQ-012: interceptar Resuelta / Rechazada para exigir mensaje
+const pendingEstado = ref<'Resuelta' | 'Rechazada' | null>(null)
+const pendingMensaje = ref('')
+
+function onEstadoChange(value: Status) {
+  if (value === 'Resuelta' || value === 'Rechazada') {
+    pendingEstado.value = value
+    pendingMensaje.value = ''
+  } else {
+    changeStatus(value)
+  }
+}
+
+function cancelarCierre() {
+  pendingEstado.value = null
+  pendingMensaje.value = ''
+}
+
+async function confirmarCierre() {
+  if (!pendingMensaje.value.trim() || !ticket.value) return
+  await run(async () => {
+    if (pendingEstado.value === 'Resuelta') {
+      await store.resolver(ticket.value!.id, { mensaje: pendingMensaje.value.trim() })
+    } else {
+      await store.rechazar(ticket.value!.id, { motivo: pendingMensaje.value.trim() })
+    }
+    pendingEstado.value = null
+    pendingMensaje.value = ''
+  })
+}
+
 // ── Formularios ────────────────────────────────────────────────────────
 const note       = ref('')
 const visibility = ref<Activity['visibility']>('Nota interna')
@@ -318,11 +349,40 @@ onMounted(() => store.load())
         <!-- ─── Zona derecha ──────────────────────────────────── -->
         <aside class="detalle-der">
 
-          <!-- Estado -->
+          <!-- Estado (REQ-012: Resuelta/Rechazada requieren mensaje) -->
           <div class="panel sidebar-card">
             <div class="sidebar-card-label"><i class="pi pi-circle"/> Estado</div>
             <Select :modelValue="ticket.estado" :options="[...statuses]"
-              :disabled="busy" @update:modelValue="changeStatus" class="w-full"/>
+              :disabled="busy || !!pendingEstado" @update:modelValue="onEstadoChange" class="w-full"/>
+
+            <!-- Panel de confirmación de cierre (Resuelta / Rechazada) -->
+            <div v-if="pendingEstado" :class="['cierre-panel', pendingEstado==='Resuelta' ? 'cierre-resolucion' : 'cierre-rechazo']">
+              <div class="cierre-header">
+                <i :class="['pi', pendingEstado==='Resuelta' ? 'pi-check-circle' : 'pi-times-circle']"/>
+                <strong>{{ pendingEstado === 'Resuelta' ? 'Mensaje de resolución' : 'Motivo del rechazo' }}</strong>
+              </div>
+              <p class="cierre-hint">
+                {{ pendingEstado === 'Resuelta'
+                  ? 'Este mensaje será visible para el solicitante. Es obligatorio.'
+                  : 'Este motivo será visible para el solicitante. Es obligatorio.' }}
+              </p>
+              <Textarea v-model="pendingMensaje" rows="4" maxlength="10000"
+                :placeholder="pendingEstado === 'Resuelta'
+                  ? 'Describe cómo se resolvió la solicitud…'
+                  : 'Explica por qué se rechaza la solicitud…'"
+                class="cierre-textarea" autofocus/>
+              <div class="cierre-actions">
+                <Button label="Cancelar" size="small" severity="secondary" text
+                  :disabled="busy" @click="cancelarCierre"/>
+                <Button
+                  :label="pendingEstado === 'Resuelta' ? 'Marcar como Resuelta' : 'Rechazar solicitud'"
+                  :icon="pendingEstado === 'Resuelta' ? 'pi pi-check' : 'pi pi-times'"
+                  :severity="pendingEstado === 'Resuelta' ? 'success' : 'danger'"
+                  size="small" :loading="busy"
+                  :disabled="!pendingMensaje.trim()"
+                  @click="confirmarCierre"/>
+              </div>
+            </div>
           </div>
 
           <!-- Categoría -->
@@ -582,6 +642,23 @@ onMounted(() => store.load())
 .meta-dl dt { color: #64748b; font-weight: 600; }
 .meta-dl dd { margin: 0; color: #1e293b; word-break: break-all; }
 .meta-dl code { font-size: 11px; background: #f1f5f9; padding: 1px 5px; border-radius: 3px; }
+
+/* REQ-012: Panel inline de resolución / rechazo */
+.cierre-panel {
+  border-radius: 8px; padding: 14px; margin-top: 4px;
+  display: flex; flex-direction: column; gap: 10px;
+  border: 1px solid transparent;
+}
+.cierre-resolucion { background: #f0fdf4; border-color: #86efac; }
+.cierre-rechazo    { background: #fff1f2; border-color: #fca5a5; }
+.cierre-header {
+  display: flex; align-items: center; gap: 8px; font-size: 13px;
+}
+.cierre-resolucion .cierre-header i { color: #16a34a; }
+.cierre-rechazo    .cierre-header i { color: #dc2626; }
+.cierre-hint { margin: 0; font-size: 12px; color: #64748b; line-height: 1.5; }
+.cierre-textarea { width: 100%; font-size: 13px; }
+.cierre-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 
 .placeholder-card { opacity: .75; }
 .muted { color: #94a3b8; }
